@@ -1,7 +1,20 @@
 # Changelog
 
-All notable changes and decisions for Bellwether 2.0. Newest first. Each decision records who made it and
+All notable changes and decisions for Bellwether. Newest first. Each decision records who made it and
 why, so a later session doesn't relitigate it.
+
+---
+
+## 2026-10-06 (late) — Naming
+
+**D12. No version number in the product's name.** Nicole.
+The product is Bellwether. The PRD, this changelog, `CLAUDE.md` and `api_check`'s Close message used a
+version number as part of the name; that wording is gone. Deliberately left as they are:
+- the local folder `bellwether-2.0/` and the paths that point at it, which stay accurate while the folder
+  keeps that name;
+- `bellwether-1.0/`, the predecessor's real folder name;
+- the git history. The first commit message keeps its original wording; changing it meant a force-push.
+The GitHub repo has been `bellwether` from the start. Workbooks stay out of GitHub (`.gitignore`).
 
 ---
 
@@ -60,7 +73,7 @@ runs and enforces the seed gate.
   `scout.py` is a relative symlink into this repo's `vendor/`. `serp_scan`, `_brief`, `yt_scan` read the
   `briefs/<slug>/` layout (D4). `find_contacts --brand` no longer defaults to a company name.
 - `briefs/_template/` created per PRD §6. `CLAUDE.md` written. `git init` done; **nothing committed.**
-- `api_check`'s Close message no longer says "not used by Bellwether". In 2.0 it is the CRM (D3).
+- `api_check`'s Close message no longer says "not used by Bellwether". Here it is the CRM (D3).
 - **D8 noise list:** close-demo's `NOISE_DOMAINS` and 1.0's are identical. Nothing to fold in.
 
 ### Carried into Phase 1 (found, not fixed)
@@ -69,13 +82,13 @@ runs and enforces the seed gate.
   the system prompt) and `serp_research`-era seed defaults. Most other hits are provenance comments.
 - close-demo scripts still write to `output/` (singular) and find keys via `../../.env`, which happens to
   resolve to `nac-worldwide/.env`. Switch them to `_keys.py` and `outputs/<slug>/` in Phase 1.
-- 1.0's skills in `nac-worldwide/.claude/skills/` are still broken (PRD §14 Q6, still open). 2.0's copies
+- 1.0's skills in `nac-worldwide/.claude/skills/` are still broken (PRD §14 Q6, still open). This repo's copies
   are separate and work.
 
 **D9. A prospecting list can be a brief folder, and it ran ahead of the Close.com replay.** Nicole.
 `briefs/affiliate-seo-creators/` holds a list, not a brand: "[brand] review" queries for 159 DTC brands,
 imported from `~/Downloads/Affiliate SEO-Creator Seed List.xlsx`. Its conversion event, asks and exclusions
-are N/A; they belong to whichever brand a site is later pitched for. Nicole chose to scaffold 2.0 and run
+are N/A; they belong to whichever brand a site is later pitched for. Nicole chose to scaffold this repo and run
 this list rather than run it on 1.0 (would have broken D2) or wait for the replay (D5). Scope: the 64 brands
 with no Category Completion Date. The 95 dated brands were pulled by hand and are not re-run.
 
@@ -108,20 +121,20 @@ Supersedes the 80 in PRD §9. Revisit if the tracker's checks become daily.
 ## 2026-10-06 — Project created
 
 ### Added
-- `PRD.md` (2.0-draft): one pipeline merging close-demo's seed-to-Close spine with Bellwether 1.0's YouTube
+- `PRD.md` (draft): one pipeline merging close-demo's seed-to-Close spine with Bellwether 1.0's YouTube
   lane and key, spend and contact tooling.
 - `CHANGELOG.md` (this file).
 
 ### Decisions
 
-**D1. close-demo is the baseline; Bellwether 2.0 is a new folder.** Nicole.
-close-demo's pipeline (stages, four gates, motion taxonomy, Close sync) is the spine. 2.0 lives at
+**D1. close-demo is the baseline; Bellwether is rebuilt in a new folder.** Nicole.
+close-demo's pipeline (stages, four gates, motion taxonomy, Close sync) is the spine. It lives at
 `nac-worldwide/bellwether-2.0/` with its own git repo, next to `bellwether-1.0/` so it shares
 `nac-worldwide/.env`.
 
 **D2. Copy only. Never delete or edit anything in close-demo.** Nicole.
-Everything 2.0 needs is copied in. `~/Desktop/serp-tracker/close-demo/` and `bellwether-1.0/` stay as they
-are, as reference. Scripts that 2.0 replaces are simply not copied.
+Everything it needs is copied in. `~/Desktop/serp-tracker/close-demo/` and `bellwether-1.0/` stay as they
+are, as reference. Scripts it replaces are simply not copied.
 
 **D3. Close is the CRM for every brand.** Nicole.
 `close_sync.py` is copied as `scripts/crm_sync.py` and sits at the core of the pipeline, not as an
@@ -138,14 +151,14 @@ name. As a result:
   brand.
 The brief folder slug is the one place a brand name appears in a path, as data chosen at intake.
 
-**D5. Close.com is the first brand 2.0 runs, to validate the merge.** Nicole.
+**D5. Close.com is the first brand to run, to validate the merge.** Nicole.
 Replay against close-demo's saved results first (no spend), then a small live run. Pass criteria are in
 PRD §11: the same 40 opportunities, the same motion split and the same 29 contacts.
 
 **D6. Keep the SERP Tracker as the client-facing view.** Nicole.
 Clients see results in the tracker: rank and AI-citation visibility for earned placements. Discovery runs
 through `serp_scan.py`. Placements go into the tracker, and its CSV export is read back into
-`data/results.csv`. `nacww_serp_tracker.py` is never modified from 2.0. SerpAPI quota is shared, protected
+`data/results.csv`. `nacww_serp_tracker.py` is never modified from here. SerpAPI quota is shared, protected
 by the reserve in `config/budgets.json`.
 
 **D7. Build order approved.** Nicole.
@@ -165,7 +178,7 @@ run → activation (drafts, arming, reply sync, tracker hand-off) → second bra
 ### Known issues carried in
 - Bellwether 1.0's skills in `nac-worldwide/.claude/skills/` (`/yt-scan`, `/serp-scan`, `/find-contacts`,
   `/scout`, `/api-check`) point at `nac-worldwide/bellwether/`, which was renamed to `bellwether-1.0/`.
-  They fail until fixed in place or replaced by 2.0's copies. Not touched here (PRD §14 Q6).
+  They fail until fixed in place or replaced by this repo's copies. Not touched here (PRD §14 Q6).
 - close-demo has uncommitted edits in the serp-tracker repo (`PRD.md`, `dataforseo_kw.py`,
   `score_opportunities.py`, `serp_research.py`). Phase 0 copies the working tree as it stands.
 

@@ -188,7 +188,7 @@ def check_close(key):
     if status == 200 and isinstance(body, dict):
         org = (body.get("organizations") or [{}])[0].get("name", "")
         return True, "valid{}".format(" · " + org if org else "")
-    return False, "HTTP {} — key rejected. Close is the CRM in 2.0 (CHANGELOG D3); fresh key pending, Phase 3 waits on it.".format(status)
+    return False, "HTTP {} — key rejected. Close is the CRM here (CHANGELOG D3); fresh key pending, Phase 3 waits on it.".format(status)
 
 
 CHECKS = [

@@ -1,16 +1,16 @@
-# Bellwether 2.0 — Product Requirements Document
+# Bellwether — Product Requirements Document
 
-**Owner:** Nicole · NAC Worldwide · **Version:** 2.0-draft · **Date:** Oct 6, 2026
+**Owner:** Nicole · NAC Worldwide · **Version:** draft · **Date:** Oct 6, 2026
 **Status:** Draft for build. Decisions behind this document are logged in `CHANGELOG.md`.
 **Predecessors:** `../bellwether-1.0/` (creator discovery, YouTube lane, key and spend tooling) and
 `~/Desktop/serp-tracker/close-demo/` (earned-media pipeline from seeds to Close leads). Both are read-only
-reference. Bellwether 2.0 copies from them and never edits or deletes anything in either folder.
+reference. Bellwether copies from them and never edits or deletes anything in either folder.
 
 ---
 
 ## 1. Summary
 
-Bellwether 2.0 is one pipeline that takes a brand brief and ends with verified contacts loaded into Close,
+Bellwether is one pipeline that takes a brand brief and ends with verified contacts loaded into Close,
 approved copy armed, and results the client can see. It merges the two halves NAC has already built:
 
 - **close-demo** proved the back half end to end for one client: seeds → SERP research → opportunities
@@ -19,7 +19,7 @@ approved copy armed, and results the client can see. It merges the two halves NA
   donor trail, farm flag), a SerpAPI web lane with spend caps, a contact finder that verifies every address,
   one key file, a budget file and a usage ledger.
 
-2.0 makes close-demo's pipeline the spine, adds YouTube as a second discovery lane feeding the same
+Bellwether makes close-demo's pipeline the spine, adds YouTube as a second discovery lane feeding the same
 opportunity list, and makes every brand a brief file rather than code. The first brand through it is
 Close.com, rerun to prove the merge lost nothing.
 
@@ -53,11 +53,11 @@ pipeline's working files.
    target and a draft lead in Close.
 2. Running a new brand is a new brief folder, not a code change. No company name appears in a script,
    skill, config or template file name.
-3. Close.com runs through 2.0 first and reproduces the close-demo result (§11) before any other brand runs.
+3. Close.com runs through the merged pipeline first and reproduces the close-demo result (§11) before any other brand runs.
 4. Every paid call is checked against `config/budgets.json` before it spends, and logged after.
 5. Placements land in the SERP Tracker so the client can see rank and AI-citation results.
 
-**Non-goals for 2.0**
+**Non-goals**
 
 - Autonomous sending. Sequences are armed by the agent and fired by Nicole. Always.
 - Changing the SERP Tracker. `nacww_serp_tracker.py` stays single-file and read-only from here.
@@ -279,4 +279,4 @@ creators into the same opportunities table.
 5. **Same-operator detection, scale fit, contribution surfaces.** Still open from close-demo's client
    review (items 6–8 in `docs/PRODUCT-FEEDBACK.md`).
 6. **Bellwether 1.0's broken skills.** The `nac-worldwide/.claude/skills/` copies still point at
-   `bellwether/`. Fix them in place, or retire them once 2.0's work?
+   `bellwether/`. Fix them in place, or retire them once this repo's work?

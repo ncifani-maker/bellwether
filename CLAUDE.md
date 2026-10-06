@@ -1,4 +1,4 @@
-# Bellwether 2.0 — project context
+# Bellwether — project context
 
 One pipeline from a brand brief to verified contacts loaded into Close, with approved copy armed and the send
 left to Nicole. Read `PRD.md` first: it is the source of truth for scope. `CHANGELOG.md` records every
