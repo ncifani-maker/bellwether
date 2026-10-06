@@ -47,6 +47,7 @@ FORUM_DOMAINS = {"quora.com", "reddit.com", "answers.com", "justanswer.com", "ti
 RETAIL = {"amazon.com", "walmart.com", "target.com", "costco.com", "bestbuy.com", "wayfair.com",
           "homedepot.com", "lowes.com", "macys.com", "kohls.com", "ebay.com", "etsy.com",
           "chewy.com", "petco.com", "petsmart.com", "sephora.com", "ulta.com", "qvc.com",
+          "samsclub.com", "bjs.com", "kroger.com", "staples.com", "overstock.com",
           "bedbathandbeyond.com", "crateandbarrel.com", "potterybarn.com", "williams-sonoma.com",
           "thrivemarket.com", "instacart.com", "cvs.com", "walgreens.com", "iherb.com"}
 
@@ -55,6 +56,16 @@ RETAIL = {"amazon.com", "walmart.com", "target.com", "costco.com", "bestbuy.com"
 # and it put Indeed and Glassdoor at the top of the first run.
 EMPLOYER_REVIEWS = {"indeed.com", "glassdoor.com", "comparably.com", "ziprecruiter.com",
                     "careerbliss.com", "simplyhired.com", "kununu.com", "payscale.com", "salary.com"}
+
+# Marketplaces and local directories list the PROVIDERS of a service with their
+# own reviews. homeadvisor.com and reviews.birdeye.com ranked for franchise
+# brands on 2026-10-06; they are the supply side's storefront, not a reviewer.
+DIRECTORIES = {"homeadvisor.com", "angi.com", "angieslist.com", "thumbtack.com", "birdeye.com",
+               "porch.com", "nextdoor.com", "houzz.com", "taskrabbit.com", "yellowpages.com",
+               "mapquest.com", "chamberofcommerce.com", "manta.com", "bark.com"}
+# The SERP Tracker's noise list, matched on the ROOT domain so country
+# subdomains (ie.trustpilot.com, nz.trustpilot.com) are caught here too.
+NOISE_ROOTS = {"trustpilot.com", "yelp.com", "bbb.org", "reddit.com"}
 
 # An app listing has reviews, but it is a store page, not a reviewer.
 APP_STORES = {"play.google.com", "apps.apple.com", "itunes.apple.com", "chrome.google.com"}
@@ -102,6 +113,10 @@ def classify(row: dict, brand: str):
         return False, "employer reviews (job site)"
     if domain.startswith(FORUM_HOSTS) or root_domain(domain) in FORUM_DOMAINS:
         return False, "forum / community"
+    if root_domain(domain) in NOISE_ROOTS:
+        return False, "on the tracker's noise list"
+    if root_domain(domain) in DIRECTORIES:
+        return False, "marketplace / local directory"
     if root_domain(domain) in RETAIL:
         return False, "retailer"
     if domain in APP_STORES:

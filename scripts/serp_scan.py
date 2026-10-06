@@ -99,12 +99,28 @@ def searches_left(key):
     return left if isinstance(left, int) else data.get("plan_searches_left")
 
 
+def is_noise(domain):
+    """True for a noise domain or any subdomain of one. Exact matching let
+    ie.trustpilot.com and nz.trustpilot.com through on 2026-10-06."""
+    parts = domain.split(".")
+    return any(".".join(parts[i:]) in NOISE_DOMAINS for i in range(len(parts) - 1))
+
+
 def domain_of(url):
     netloc = urllib.parse.urlparse(url).netloc.lower()
     return netloc[4:] if netloc.startswith("www.") else netloc
 
 
+# Every request sent, counted at the moment it is sent. The per-seed tally this
+# replaced lost a seed's spend whenever the seed errored: on 2026-10-06 the
+# Hungryroot retries and every charged timeout vanished from the ledger. A
+# request that times out may or may not be billed, so this errs high, which is
+# the right direction for a budget.
+SENT = {"n": 0}
+
+
 def fetch(key, query, start):
+    SENT["n"] += 1
     data = _get_json(ENDPOINT, {
         "engine": "google", "q": query, "api_key": key,
         "num": 10, "start": start,
@@ -151,10 +167,20 @@ def looks_off_query(query, results):
         return False
     subject = [w for w in words if w not in QUALIFIERS] or words
     anchor = max(subject, key=len)
-    if anchor not in blob:
+    # Match loosely on form, strictly on subject. "hungryroot reviews" was flagged
+    # twice on 2026-10-06 for two reasons at once: reviewers write "Hungry Root"
+    # as two words, and titles say "Review", not "reviews". Neither means the
+    # SERP is about something else, so spacing and a plural s are ignored.
+    nospace = blob.replace(" ", "")
+
+    def present(word):
+        forms = {word, word[:-1] if len(word) > 3 and word.endswith("s") else word}
+        return any(f in blob or f in nospace for f in forms)
+
+    if not present(anchor):
         return True
     tail = words[1:]
-    return bool(tail) and not any(w in blob for w in tail)
+    return bool(tail) and not any(present(w) for w in tail)
 
 
 def scan_query(key, query, pages):
@@ -169,7 +195,7 @@ def scan_query(key, query, pages):
             rows = []
             for item in data.get("organic_results", []):
                 url = item.get("link", "")
-                if not url or domain_of(url) in NOISE_DOMAINS or url in seen:
+                if not url or is_noise(domain_of(url)) or url in seen:
                     continue
                 rows.append({
                     "rank": item.get("position"),
@@ -180,7 +206,7 @@ def scan_query(key, query, pages):
                 })
             if not looks_off_query(query, rows):
                 break
-            sys.stderr.write("  [{}] start={} does not answer the query; retry {}/2\n".format(
+            sys.stderr.write("  [{}] start={} does not answer the query (attempt {}/3)\n".format(
                 query, start, attempt + 1))
             rows = []
             time.sleep(3)
@@ -320,25 +346,50 @@ def main():
         except ValueError:
             raw = {}
 
-    spent, failed = 0, []
+    failed, stopped_at = [], None
     latest = {}
-    for i, seed in enumerate(seeds, 1):
-        sys.stderr.write("[{}/{}] {}\n".format(i, len(seeds), seed))
-        try:
-            rows, used = scan_query(key, seed, pages)
-            spent += used
-        except Exception as exc:
-            failed.append(seed)
-            sys.stderr.write("  ERROR: {}\n".format(str(exc)[:160]))
-            continue
-        latest[seed] = rows
-        raw[seed] = rows
-        sys.stderr.write("  {} results\n".format(len(rows)))
-
-    if spent:
-        _budget.log("serpapi", spent, "searches", "serp-scan", args.brand, args.slate,
-                    "{} seeds x {} pages".format(len(seeds), pages))
-    raw_path.write_text(json.dumps(raw, indent=2))
+    reserve = (_budget.budgets().get("serpapi") or {}).get("reserve") or 0
+    # Balance as of the last account reading, and how much had been sent then.
+    # Between readings the estimate is that balance minus what this run has sent
+    # since; each fresh reading re-bases it, so spend from elsewhere (the tracker)
+    # is never forgotten again after it has been seen once.
+    base_left, base_sent = remaining, 0
+    try:
+        for i, seed in enumerate(seeds, 1):
+            # The up-front gate cannot see retries and timeouts, so check again
+            # before every seed. Re-ask the account every 10 seeds (free) to
+            # catch anything else spending from it in parallel, e.g. the tracker.
+            if remaining is not None:
+                if i % 10 == 1 and i > 1:
+                    fresh = searches_left(key)
+                    if fresh is not None:
+                        base_left, base_sent = fresh, SENT["n"]
+                left = base_left - (SENT["n"] - base_sent)
+                if left - pages < reserve:
+                    stopped_at = i
+                    sys.stderr.write("  STOPPED at {}/{}: {} searches left, the next seed would go under "
+                                     "the reserve of {}\n".format(i, len(seeds), left, reserve))
+                    break
+            sys.stderr.write("[{}/{}] {}\n".format(i, len(seeds), seed))
+            try:
+                rows, _ = scan_query(key, seed, pages)
+            except Exception as exc:
+                failed.append(seed)
+                sys.stderr.write("  ERROR: {}\n".format(str(exc)[:160]))
+                continue
+            latest[seed] = rows
+            raw[seed] = rows
+            sys.stderr.write("  {} results\n".format(len(rows)))
+    finally:
+        # Log whatever was sent, even if the run died halfway.
+        spent = SENT["n"]
+        if spent:
+            _budget.log("serpapi", spent, "searches", "serp-scan", args.brand, args.slate,
+                        "{} of {} seeds x {} pages{}{}".format(
+                            len(latest), len(seeds), pages,
+                            "; {} failed".format(len(failed)) if failed else "",
+                            "; stopped at reserve" if stopped_at else ""))
+        raw_path.write_text(json.dumps(raw, indent=2))
 
     # 4. Aggregate per domain — the unit of decision is a partner, not a link.
     # Aggregate over EVERY seed known for this brand and slate, not just the ones
@@ -396,6 +447,9 @@ def main():
         len(ranked), len(raw), len(latest), spent))
     if failed:
         print("failed seeds ({}): {}".format(len(failed), ", ".join(failed)))
+    if stopped_at:
+        print("stopped at seed {} of {} to keep the reserve of {}; the rest did not run".format(
+            stopped_at, len(seeds), reserve))
     if dropped:
         print("excluded: {} results on the brief's exclusion list".format(len(dropped)))
     print()
