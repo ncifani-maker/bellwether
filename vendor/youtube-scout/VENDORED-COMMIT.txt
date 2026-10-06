@@ -1,0 +1,33 @@
+upstream:      https://github.com/AgriciDaniel/youtube-scout  (MIT)
+commit:        8edb2b66cb2da969d54ece257d0a81047f5f8c8e
+               "Release 0.2.0: local transcription, faster downloads, public release"
+vendored:      2026-09-11
+upstream HEAD: still this commit, checked 2026-09-24
+
+local patches applied on top (patches/, newest last):
+  0001-ytdlp-preflight.patch   yt-dlp preflight so --hooks / --transcribe stop
+                               before spending quota when yt-dlp is missing.
+                               Nicole, 2026-09-18. Submitted upstream as PR #1
+                               on 2026-09-24; drop the patch if it merges.
+
+This tree is upstream-at-that-commit PLUS the patches above. It is not pristine,
+and that is deliberate — the patch is ours and re-applying it is part of the
+re-vendor procedure below.
+
+There is one copy of scout.py, here. The /scout skill at
+../../../.claude/skills/scout/scripts/scout.py is a symlink to this file, so both
+/scout and /yt-scan always run the same code. Before 2026-09-24 they were two
+separate files that had silently drifted: the skill copy carried the yt-dlp patch
+and this one did not, while both claimed this same commit.
+
+SKILL.md and requirements.txt exist in both trees as real files. Keep them in step
+by hand on a re-vendor; the patch covers both.
+
+To re-vendor:
+  1. Fetch the new upstream tree over this one (keep patches/).
+  2. cd bellwether/vendor/youtube-scout && patch -p1 < patches/0001-ytdlp-preflight.patch
+     A patch that no longer applies means upstream fixed it — drop the patch file
+     and note that here rather than forcing it.
+  3. Copy SKILL.md and requirements.txt to ../../../.claude/skills/scout/.
+  4. Update this file: commit, date, and the patch list.
+  5. Run one scan before trusting it. Re-vendor deliberately; do not silently pull.

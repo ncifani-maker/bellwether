@@ -1,0 +1,1 @@
+../../../../vendor/youtube-scout/scripts/scout.py

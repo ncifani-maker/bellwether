@@ -1,0 +1,45 @@
+{
+  "_comment": [
+    "Spend caps for every Bellwether command that costs money. Checked before a run,",
+    "not after. Edit the numbers here; no command hardcodes its own limit.",
+    "",
+    "Measured 2026-09-23 with scripts/api_check.py:",
+    "  SerpAPI    Free plan, 250 searches/month, 213 left, 37 already used.",
+    "             SHARED with the SERP Tracker's daily client rank checks, which",
+    "             cost 5 searches per query per run. That is the tight one.",
+    "  Hunter     Free plan, 50 searches + 100 verifications/month, resets the 20th.",
+    "  DataForSEO pay-as-you-go, $0.54 left. Needs a top-up before traffic estimates.",
+    "  YouTube    free, 10,000 units/day. A scout search costs 100, a donor scan ~4/channel.",
+    "",
+    "How each cap is enforced, in this order:",
+    "  1. reserve        — never spend below this many searches left on the account,",
+    "                      so the tracker's client rank checks keep running.",
+    "  2. monthly_cap    — Bellwether's own share per calendar month, counted from",
+    "                      data/api-usage.csv.",
+    "  3. confirm_above  — a bigger run exits with code 3 and prints the plan instead",
+    "                      of spending. Re-run with --yes once Nicole approves.",
+    "",
+    "2026-10-06, Nicole (CHANGELOG D11): reserve 80 -> 50, monthly cap 100 -> 160, to run",
+    "the 61 plural brand-review queries. The tracker's use turned out to be manual, not",
+    "daily: 213 searches left on Oct 2 and still 213 on the morning of Oct 6. The 80 was",
+    "sized for daily rank checks that are not happening. Revisit if they start."
+  ],
+  "serpapi": {
+    "monthly_scan_cap": 160,
+    "reserve": 50,
+    "confirm_above": 20
+  },
+  "hunter": {
+    "monthly_search_cap": 30,
+    "confirm_above": 10,
+    "always_verify": true
+  },
+  "dataforseo": {
+    "confirm_above_usd": 0.25,
+    "min_balance_usd": 0.10
+  },
+  "youtube": {
+    "daily_unit_cap": 8000,
+    "confirm_above_units": 1500
+  }
+}

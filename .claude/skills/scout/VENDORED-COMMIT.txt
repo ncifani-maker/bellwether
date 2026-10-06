@@ -1,0 +1,15 @@
+upstream:      https://github.com/AgriciDaniel/youtube-scout  (MIT)
+commit:        8edb2b66cb2da969d54ece257d0a81047f5f8c8e
+vendored:      2026-09-11 · local patch 0001-ytdlp-preflight, 2026-09-18
+
+scripts/scout.py here is a SYMLINK to the vendored copy:
+  ../../../bellwether/vendor/youtube-scout/scripts/scout.py
+
+That tree is the source of truth — provenance, patches and the re-vendor
+procedure are in its own VENDORED-COMMIT.txt. Don't replace the symlink with a
+copy: two copies is exactly what went wrong before 2026-09-24, when this one
+carried the yt-dlp preflight patch and the vendored one didn't, while both
+claimed the same commit.
+
+SKILL.md and requirements.txt here are real files, kept in step with the vendored
+tree by hand on a re-vendor.

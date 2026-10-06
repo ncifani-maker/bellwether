@@ -1,0 +1,20 @@
+# Secrets — never commit. Every NAC API key lives in one file at the
+# nac-worldwide folder root (../.env, mode 600), so any project can read it
+# and Claude — which can only see Documents/ — can too.
+*.env
+!*.env.example
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Scout/study artifacts: regenerable, and large
+outputs/**/*.xlsx
+*.backup-*
+
+# Contacts hold PII (verified business emails). Never commit.
+data/contacts.csv
+
+# macOS
+.DS_Store
