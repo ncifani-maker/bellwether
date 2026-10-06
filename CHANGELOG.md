@@ -5,6 +5,43 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-06 (evening) — Plural run; spend-tracking fixes
+
+### The plural run
+61 "[brand] reviews" queries (D10, D11). 53 returned; 8 are held for the SerpAPI reset (Nicole):
+- 3 timed out at SerpAPI's end: The Cleaning Authority, Hungryroot, Nectar mattress.
+- 5 had their whole page wrongly dropped by the off-query guard: Mosaic Foods, Misen, Boy Smells,
+  Easyplant, Moon Juice. **Claude's bug.** The guard wanted the word "reviews" and the titles said
+  "Review"; after three flags it discards the page. Four more queries passed on a retry. The fix landed
+  while the run was going, too late for the running process. Cost: about 24 searches of retries.
+
+Merged with the singular run: 125 queries, **209 review sites, 41 reviewing 2+ brands** (from 162 and 25
+on singular alone), consistent with the D10 test. Account at 50 searches left, the new reserve.
+
+**Ledger gap, documented not patched:** this run logged 75 searches; the account fell 78. The old code
+dropped the tally of any query that errored, so up to 5 requests from the 3 timed-out queries went
+uncounted (whether SerpAPI billed the timeouts is unknown). The ledger records what the code counted;
+the gap is recorded here rather than guessed into it.
+
+### Fixed in `serp_scan.py`
+- **Off-query guard** ignores spacing and a plural s: "Hungry Root" matches "hungryroot", "Review"
+  matches "reviews". Re-checked against all 67 SERPs on file at the time: none flagged; the magnesium
+  and dictionary-page failures it was built for are still caught.
+- **Spend is counted per request sent**, at the moment it is sent, so a query that errors still reports
+  its spend. Logged in a `finally`, so even a crashed run records what it spent.
+- **The reserve is checked before every query**, not only before the run, and the account balance is
+  re-read every 10 queries so spend from elsewhere (the tracker) is seen. Tested offline with fake calls:
+  a timeout, a three-try query and 5 searches spent in parallel; it stopped at exactly the reserve.
+- **Noise filter covers subdomains.** `ie.trustpilot.com` and `nz.trustpilot.com` had slipped through.
+- Retry message reads "attempt 3/3", not "retry 3/2".
+
+### Fixed in `review_sites.py`
+- Marketplaces and local directories (homeadvisor.com, reviews.birdeye.com) skipped with their own
+  reason: they are the providers' storefront, not reviewers. samsclub.com added to retail. The tracker's
+  noise list is matched on the root domain.
+
+---
+
 ## 2026-10-06 (afternoon) — Phase 0 scaffold; first scan
 
 ### Phase 0 done
