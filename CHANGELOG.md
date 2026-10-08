@@ -5,6 +5,37 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-08 — Curation: creators, not publications
+
+**D13. The team gets creator-style blogs and niche review sites; media is set aside.** Nicole.
+"Sites like nytimes.com" are not what the team curates. Small niche review businesses (mattressclarity,
+housefresh, thegoodtrade) go WITH the creators: they monetize through affiliate links and review exactly
+these categories. Media and publishers move to their own sheet, not deleted. Done before the Close.com
+replay: the second step ahead of D5, after D9, chosen by Nicole as "review sites before video".
+
+### Built
+- `scripts/site_profile.py`: reads each kept site's homepage, about page, contact page and RSS feed (no
+  API, no spend) and tiers it creator blog / niche review site / media / check, with the evidence in a
+  column so any tier can be argued with. Calibrated on ten hand-judged sites first: 7/10, then 10/10
+  after three fixes, all found on creators, the tier the team wants most:
+  - **Feeds.** Small WordPress blogs often answer 403 to anything that isn't a browser, yet serve
+    `/feed/`, which names every post's author. One author settles it.
+  - **About pages live anywhere** (`/about-nicole-jaques/`), so the link is found on the homepage.
+  - **Storefronts.** A linked ShopMy or Amazon storefront is a creator; no staff writer has one.
+  A last resort uses the site's own article title in the singular first person ("Honest Review ... after
+  2 plus years of use"), never "we" or "our", which reads as a team.
+- `review_sites.collect()` split out of `build()` so both scripts share one list of kept sites. Lemon8
+  (a social app) is now a platform, not a site.
+- Output: `site-profiles.csv` (committed, no addresses: `published_email` is yes/blank) and
+  `creator-shortlist.xlsx` (gitignored): For the team / Check by hand / Media - set aside / Method.
+
+First run: 208 sites. **115 for the team** (60 creator, 55 niche), 27 media, 66 to check by hand: about
+half blocked with no readable feed, the rest ambiguous, including homonyms the brand query caught by
+accident (infinityplus.co.uk reviews the Tad Williams novel *Otherland*; dvc-members.com reviews the
+Mosaic Canteen at Epcot). Of the 115, 41 publish an email and 80 have a contact page.
+
+---
+
 ## 2026-10-06 (late) — Naming
 
 **D12. No version number in the product's name.** Nicole.

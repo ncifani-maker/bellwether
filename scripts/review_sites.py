@@ -42,7 +42,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 FORUM_HOSTS = ("forum.", "forums.", "community.", "boards.", "discuss.", "discussion.")
-FORUM_DOMAINS = {"quora.com", "reddit.com", "answers.com", "justanswer.com", "tiktok.com",
+FORUM_DOMAINS = {"quora.com", "reddit.com", "answers.com", "justanswer.com", "tiktok.com", "lemon8-app.com",
                  "facebook.com", "instagram.com", "youtube.com", "pinterest.com"}
 RETAIL = {"amazon.com", "walmart.com", "target.com", "costco.com", "bestbuy.com", "wayfair.com",
           "homedepot.com", "lowes.com", "macys.com", "kohls.com", "ebay.com", "etsy.com",
@@ -134,6 +134,14 @@ def load_seeds(slug: str) -> dict:
 
 
 def build(slug: str, slate: str) -> Path:
+    raw_path, raw, ranked, results, excluded = collect(slug, slate)
+    out = raw_path.parent / "review-sites.xlsx"
+    write_workbook(out, slug, slate, raw, ranked, results, excluded)
+    return out
+
+
+def collect(slug: str, slate: str):
+    """The kept sites, ranked. One definition, shared with site_profile.py."""
     seeds = load_seeds(slug)
     raw_path = ROOT / "outputs" / slug / slate / "serp-results.json"
     raw = json.loads(raw_path.read_text())
@@ -163,9 +171,7 @@ def build(slug: str, slate: str) -> Path:
 
     ranked = sorted(sites.items(), key=lambda kv: (-len(kv[1]["brands"]), -len(kv[1]["categories"]),
                                                   kv[1]["best"]))
-    out = raw_path.parent / "review-sites.xlsx"
-    write_workbook(out, slug, slate, raw, ranked, results, excluded)
-    return out
+    return raw_path, raw, ranked, results, excluded
 
 
 def write_workbook(out, slug, slate, raw, ranked, results, excluded):
