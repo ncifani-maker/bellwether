@@ -17,6 +17,10 @@ anything.
   contact (CHANGELOG D14). Still verified, still never guessed.
 - **Every brand is a brief folder**, `briefs/<slug>/`, created from `briefs/_template/`. No script, skill,
   config or template is named after a company, and no script refers to a brand by name (CHANGELOG D4).
+- **No email address goes to GitHub, ever.** Contacts live in `data/contacts.csv`, which is gitignored and
+  stays on this Mac. Spreadsheets stay local too. A pre-commit hook in `.githooks/` refuses any commit that
+  adds either (CHANGELOG D16). It is on via `git config core.hooksPath .githooks`; run that again after
+  any fresh clone, because git does not carry the setting.
 - **Every paid call is checked against `config/budgets.json` before it spends** and logged to
   `data/api-usage.csv` after. A command that stops with exit code 3 is asking Nicole, not failing.
 - **Keys:** one file, `../.env` (the nac-worldwide root, mode 600), read through `scripts/_keys.py`. Never

@@ -5,6 +5,24 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-09 (evening) — Email addresses stay local
+
+**D16. No document containing an email address is pushed. Contacts stay on this Mac.** Nicole.
+Audit before the rule: every file in all 7 commits on GitHub scanned for email-shaped strings, with
+controls (the scan reads every commit, catches a test address, and finds the 58 real ones in the local
+`data/contacts.csv`): **none**. `data/contacts.csv` has never been committed.
+
+Enforced, not remembered: `.githooks/pre-commit` refuses a commit that adds an email address to any text
+file, or adds a spreadsheet at all (binary, so a scan can't see inside; the team's workbooks hold
+contacts). Masked forms (`h***@domain.com`) pass. Tested both refusals and the pass before committing.
+Activated locally with `git config core.hooksPath .githooks`, which a fresh clone must repeat.
+
+Not covered by the hook, noted for Nicole: commit METADATA carries her work address as author on every
+commit, plus Claude's noreply co-author line. Private repo, and her own address, so left as is pending
+her call. (The hook's first real refusal was this entry, which quoted both addresses verbatim.)
+
+---
+
 ## 2026-10-09 (later) — Contacts for the curated list
 
 **D15. The team's curated list is sourced as curated.** Nicole.

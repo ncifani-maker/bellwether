@@ -1,0 +1,28 @@
+#!/bin/sh
+# Refuse any commit that would put an email address on GitHub (CHANGELOG D16).
+# Contacts live in data/contacts.csv, which is gitignored and stays on this Mac.
+#
+# Checks only what this commit ADDS. Two rules:
+#   1. no email-shaped string in any added line of a text file;
+#   2. no spreadsheet at all (.xlsx/.xls/.numbers/.ods): they are binary, so
+#      rule 1 cannot see inside them, and the team's workbooks hold contacts.
+# Masked forms like h***@domain.com are not addresses and pass.
+# To override after checking the output yourself: git commit --no-verify
+
+sheets=$(git diff --cached --name-only --diff-filter=AM | grep -iE '\.(xlsx|xls|numbers|ods)$')
+if [ -n "$sheets" ]; then
+  echo "BLOCKED: spreadsheets cannot be scanned for email addresses, so they stay local:" >&2
+  echo "$sheets" | sed 's/^/  /' >&2
+  exit 1
+fi
+
+found=$(git diff --cached -U0 --no-color --diff-filter=AM \
+  | grep '^+' | grep -v '^+++' \
+  | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' | sort -u)
+if [ -n "$found" ]; then
+  echo "BLOCKED: this commit would add email addresses to the repo:" >&2
+  echo "$found" | sed -E 's/^(.).*@/\1***@/; s/^/  /' >&2
+  echo "Keep contacts in data/contacts.csv (gitignored). Unstage the file that adds these." >&2
+  exit 1
+fi
+exit 0
