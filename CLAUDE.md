@@ -13,6 +13,8 @@ anything.
   `→ Ready for review. Reply: APPROVE to proceed, REVISE [note] to adjust, NEXT to move to the next stage.`
 - **No unverified address enters Close.** Contacts come from the target's own published pages or Hunter,
   role and business addresses only, every one verified. No guessed addresses, no captcha-gated sources.
+  On a site run by one person, that person's address on the site's own domain counts as the business
+  contact (CHANGELOG D14). Still verified, still never guessed.
 - **Every brand is a brief folder**, `briefs/<slug>/`, created from `briefs/_template/`. No script, skill,
   config or template is named after a company, and no script refers to a brand by name (CHANGELOG D4).
 - **Every paid call is checked against `config/budgets.json` before it spends** and logged to

@@ -21,6 +21,9 @@ business roles, and **every address is verified before a pitch is drafted agains
 it**. No guessed addresses, no harvesting beyond the target's own domain, no
 captcha-gated sources.
 
+Amended 2026-10-09 (CHANGELOG D14): On a site run by one person, that person's address on the site's own domain counts as the business contact. Still verified, still never guessed. A one-person blog has no
+editor@ and no partnerships lead; the owner is both.
+
 That last one matters here. A YouTube About-page email sits behind a captcha.
 Nicole can reveal it by hand; you never do, and you never suggest a way around it.
 

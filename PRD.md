@@ -160,7 +160,8 @@ channel-search page or from a truncated description, and screen geography before
 
 - **Contacts:** published business or role addresses on the target's own pages first (free), Hunter domain
   search second, Hunter verification of every address always. No guessed addresses, no harvesting beyond
-  the target's domain, no captcha-gated sources. Motion decides the role searched for. `usable` decides:
+  the target's domain, no captcha-gated sources. On a site run by one person, that person's address on
+  the site's own domain counts as the business contact (CHANGELOG D14). Motion decides the role searched for. `usable` decides:
   `valid` and self-published `webmail` yes; `accept_all` is Nicole's call; `unknown` and `risky` no.
 - **No unverified address enters Close.** This is the quiet fourth gate.
 - **Close is the CRM for every brand.** `scripts/crm_sync.py` creates draft leads, writes `close_lead_id`

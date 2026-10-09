@@ -133,8 +133,16 @@ def from_description(text):
     return emails, sites
 
 
-def hunter_domain_search(domain, key):
-    """Role addresses and business roles only. One Hunter search credit."""
+def hunter_domain_search(domain, key, single_operator=False):
+    """Role addresses and business roles, plus the owner of a one-person site.
+
+    One Hunter search credit per call, however many addresses come back
+    (measured 2026-10-09: five results cost one credit). `single_operator` is
+    the caller's to set, from evidence about the site (site_profile.py's
+    creator tier with one author), never assumed: on a one-person site the
+    owner's address on the site's own domain IS the business contact
+    (CHANGELOG D14). It is still verified like every other address.
+    """
     status, body = fetch(HUNTER + "/domain-search?" + urllib.parse.urlencode(
         {"domain": domain, "limit": 10, "api_key": key}))
     if status != 200:
@@ -146,13 +154,15 @@ def hunter_domain_search(domain, key):
         position = item.get("position") or ""
         is_role = item.get("type") == "generic" or local in ROLE_LOCALPART
         is_business = bool(BUSINESS_POSITION.search(position))
-        if not (is_role or is_business):
+        own_domain = email.rsplit("@", 1)[-1].lower() in (domain.lower(), "www." + domain.lower())
+        is_owner = single_operator and own_domain
+        if not (is_role or is_business or is_owner):
             continue      # a named person with no business role is not ours to take
         out.append({
             "email": email,
             "name": " ".join(x for x in (item.get("first_name"), item.get("last_name")) if x),
             "role": position,
-            "kind": "site-role" if is_role else "site-business",
+            "kind": "site-role" if is_role else ("site-business" if is_business else "site-owner"),
         })
     return out, ""
 

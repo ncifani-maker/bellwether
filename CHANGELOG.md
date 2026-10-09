@@ -5,6 +5,25 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-09 — Hunter test; contact rule amended
+
+**D14. On a one-person site, the owner's address on the site's own domain is the business contact.** Nicole.
+The rule said role or business addresses only. A Hunter test on three team sites that publish no email
+(newmodernmom.com, nicolejaques.com, mattressclarity.com) returned for one of them a single personal
+address with no role, which the rule would have dropped, though on a one-person blog there is no one else
+to reach. close-demo accepted these for the same reason. Amended wording: "On a site run by one person,
+that person's address on the site's own domain counts as the business contact. Still verified, still never
+guessed." Whether a site is one person is evidence from `site_profile.py` (creator tier, one author), set
+by the caller, never assumed.
+
+**Hunter, measured (3 searches, Nicole approved):** one credit per domain search however many addresses
+come back (mattressclarity returned five for one credit), against a third-party guide claiming a credit per
+address. All three found something, so whether an EMPTY search costs a credit is still open; the contact
+step will record Hunter's counter around each search and settle it on the real run. Searches: 45 of 50 left
+until Oct 20. Nothing was stored: addresses appeared masked on screen only.
+
+---
+
 ## 2026-10-08 — Curation: creators, not publications
 
 **D13. The team gets creator-style blogs and niche review sites; media is set aside.** Nicole.
