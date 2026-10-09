@@ -5,6 +5,31 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-10 (later) — Commands for the web lane
+
+### Built
+Three commands so the steps run the same way every time, instead of as one-off scripts in a session:
+- **`/import-seeds <file> <slug>`** (`scripts/import_seeds.py`): a downloaded seed spreadsheet into
+  `briefs/<slug>/seeds.csv`. Columns matched loosely; a completion date marks a row done. Re-importing
+  keeps every existing seed's status, so a run, a hold or a retirement is never undone. Tested: the
+  original sheet re-imported changes nothing; into a fresh brief it gives the same 190 done and 128
+  approved worked out by hand on Oct 6. Reads a file because the Google Sheets connector has been
+  failing to connect.
+- **`/run-seeds <slug>`** (`scripts/run_seeds.py`): `serp_scan` → `review_sites` → `site_profile`, page 1
+  by default, budget gates respected (exit 3 waits for Nicole, exit 2 is a refusal).
+- **`/fetch-emails <csv> <slug>`**: `find_contacts --from-sites`, then the new
+  `scripts/emails_into_sheet.py`, which hands back the team's own CSV with `email` and `email status`
+  added, same rows and order. Tested on a copy of their list: the same 53 addresses as the file Nicole
+  already has. It never writes into the repo; `.gitignore` also covers `*with emails*.csv`.
+
+### Noted
+SerpAPI showed 25 searches left on Oct 10, down from 50 on Oct 6, with no Bellwether scan in between:
+the tracker or the `serp-tracker` session. The 50 reserve now refuses any Bellwether scan until the plan
+resets, which is the reserve doing its job. Bellwether's own October count is 162 against the 160 cap,
+because the plural run's retries (pre-fix code) went past its estimate.
+
+---
+
 ## 2026-10-10 — Published emails captured at research time
 
 **D18. If research finds a published email, it goes in a new column straight away.** Nicole.
