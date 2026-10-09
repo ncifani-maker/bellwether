@@ -17,9 +17,14 @@ file, or adds a spreadsheet at all (binary, so a scan can't see inside; the team
 contacts). Masked forms (`h***@domain.com`) pass. Tested both refusals and the pass before committing.
 Activated locally with `git config core.hooksPath .githooks`, which a fresh clone must repeat.
 
-Not covered by the hook, noted for Nicole: commit METADATA carries her work address as author on every
-commit, plus Claude's noreply co-author line. Private repo, and her own address, so left as is pending
-her call. (The hook's first real refusal was this entry, which quoted both addresses verbatim.)
+Not covered by the hook: commit METADATA carries the author's address. Resolved by D17. (The hook's
+first real refusal was this entry, which quoted two addresses verbatim.)
+
+**D17. Commits in this repo are authored with Nicole's GitHub noreply address.** Nicole.
+Set with a repo-local `git config user.email`, looked up from GitHub (her user id plus login at GitHub's
+noreply domain), the same one her serp-tracker commits already use. Her global git identity is unchanged,
+so other repos are unaffected. The 7 earlier commits keep her work address: rewriting history was not
+asked for. Like the hook, this is per-clone; a fresh clone needs the same `git config user.email`.
 
 ---
 
