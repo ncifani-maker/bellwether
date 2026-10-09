@@ -92,7 +92,7 @@ seeds ── GATE 1: Nicole approves seeds
 | # | Stage | Command | Paid API | Output | Gate |
 | --- | --- | --- | --- | --- | --- |
 | 0 | Intake | — | — | `briefs/<slug>/brief.md`, `relationships.csv` | Brief complete |
-| 1 | Seeds | `/seed-list` | DataForSEO | `briefs/<slug>/seeds.csv` | **Seeds** |
+| 1 | Seeds | `/create-seeds` | DataForSEO | `briefs/<slug>/seeds.csv` | **Seeds** |
 | 2a | Web scan | `/serp-scan` | SerpAPI | `outputs/<slug>/<slate>/serp-domains.csv` | — |
 | 2b | YouTube scan | `/yt-scan` | YouTube Data API | scout workbook + donor scan | — |
 | 3 | Qualify + score | `/score` | DataForSEO (optional) | `data/opportunities.csv`, shortlist workbook | **Shortlist** |

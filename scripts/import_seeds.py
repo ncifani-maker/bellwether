@@ -58,6 +58,7 @@ def columns(header):
         "brand": next(iter(pick(lambda n: n == "brand" or n.startswith("brand"))), None),
         "category": next(iter(pick(lambda n: n.startswith("categor") and "complet" not in n)), None),
         "done": next(iter(pick(lambda n: "complet" in n or n == "done")), None),
+        "intent": next(iter(pick(lambda n: n in ("intent", "bucket", "intent/bucket"))), None),
     }
 
 
@@ -84,16 +85,19 @@ def main():
     for r in rows[header_at + 1:]:
         cell = lambda i: (str(r[i]).strip() if i is not None and i < len(r) and r[i] not in (None, "") else "")
         brand, category, done = cell(cols["brand"]), cell(cols["category"]), cell(cols["done"])
+        intent = cell(cols["intent"])
         for n, qi in enumerate(cols["queries"]):
             kw = cell(qi)
             if not kw:
                 continue
-            form = "singular" if n == 0 else "plural" if n == 1 else "form-{}".format(n + 1)
+            # Singular/plural only means something when the sheet has both columns.
+            form = ("" if len(cols["queries"]) == 1 else
+                    "singular" if n == 0 else "plural" if n == 1 else "form-{}".format(n + 1))
             when = done[:10] if done else ""
             if isinstance(r[cols["done"]] if cols["done"] is not None else None, datetime):
                 when = r[cols["done"]].date().isoformat()
             incoming.append({
-                "keyword": kw, "intent": "", "priority": "",
+                "keyword": kw, "intent": intent, "priority": "",
                 "status": "done" if done else ("proposed" if args.hold else "approved"),
                 "added_by": src.name, "date": today,
                 "note": "completed by hand {}; not re-run".format(when) if done else "",
@@ -147,7 +151,11 @@ def main():
             w.writerow({k: r.get(k, "") for k in FIELDS})
     now = Counter(r["status"] for r in merged)
     print("  wrote {} seeds: {}".format(len(merged), dict(now)))
-    print("next: /run-seeds {} --dry-run".format(args.slug))
+    if args.hold:
+        print("next: Nicole approves the proposed seeds (seed_status.py, /create-seeds step 6); "
+              "only approved seeds run")
+    else:
+        print("next: /run-seeds {} --dry-run".format(args.slug))
     return 0
 
 

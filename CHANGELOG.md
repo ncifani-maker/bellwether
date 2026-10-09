@@ -5,6 +5,28 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-10 (evening) — /create-seeds
+
+### Built
+- **`/create-seeds <slug>`**: stage 1 of the pipeline, named to match `/import-seeds` and `/run-seeds`
+  (the PRD called it `/seed-list`; renamed there). Claude drafts in-session, in one of two modes:
+  *category* (close-demo's four buckets, now in `docs/seed-list-framework.md`) or *brand-review*
+  ("[brand] review" and "[brand] reviews", with the product word added to ambiguous names). The
+  skill carries the seed lessons logged so far: intent over volume, how-to queries pull medical
+  publishers, unknown brand names pull homonyms, franchise brands pull employee reviews. Everything
+  lands as `proposed`; nothing runs until Nicole approves.
+- `scripts/seed_status.py`: approve, hold or retire seeds with who and when in the note. Retiring
+  refuses to run without a reason.
+- `scripts/seed_volume.py`: Google volume and cost-per-click from DataForSEO, one request, balance
+  checked first (free), confirm threshold respected, actual cost read back into the ledger. Standard
+  library port of close-demo's `dataforseo_kw.py`. Writes `briefs/<slug>/seed-volume.csv`.
+- `import_seeds.py` carries an intent/bucket column, and after a `--hold` import points at approval
+  rather than at running.
+- Tested end to end on a throwaway brief (both modes, approve, retire, the refusal, the volume dry
+  run), spending nothing; the test brief was deleted.
+
+---
+
 ## 2026-10-10 (later) — Commands for the web lane
 
 ### Built

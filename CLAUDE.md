@@ -47,6 +47,7 @@ vendor/youtube-scout/  pinned upstream; local patches in patches/
 ## Commands (`.claude/skills/`, paths relative to the skill so a folder rename can't break them)
 | Command | Stage |
 | --- | --- |
+| `/create-seeds <slug>` | 1: draft a seed list (category or brand-review) as `proposed`, optional volume/CPC, record approvals and retirements |
 | `/import-seeds <file> <slug>` | 1: a seed spreadsheet (.xlsx/.csv) into `briefs/<slug>/seeds.csv`. Free. |
 | `/run-seeds <slug>` | 2a + 3: scan approved seeds, keep reviews, tier sites, capture published emails |
 | `/fetch-emails <csv> <slug>` | 4: contacts for the team's curated list, handed back in their own CSV |
@@ -56,7 +57,7 @@ vendor/youtube-scout/  pinned upstream; local patches in patches/
 | `/find-contacts` | 4: published first, Hunter second, verify always |
 | `/scout <topic>` | raw youtube-scout, no screens |
 
-Not built yet: `/seed-list`, `/score`, `/crm-sync`, `/draft-copy` (PRD §12, Phases 1–4).
+Not built yet: `/score`, `/crm-sync`, `/draft-copy` (PRD §12, Phases 1–4).
 
 ## Status
 Phase 0 (scaffold) done 2026-10-06. Next: Phase 1, brand-neutral schema and the Close.com replay (PRD §11).
