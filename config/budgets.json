@@ -31,6 +31,7 @@
   },
   "hunter": {
     "monthly_search_cap": 30,
+    "monthly_verification_cap": 100,
     "confirm_above": 10,
     "always_verify": true
   },

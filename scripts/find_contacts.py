@@ -133,6 +133,12 @@ def from_description(text):
     return emails, sites
 
 
+# What the last domain search returned BEFORE the contact rule filtered it.
+# "Hunter found nothing" and "nothing passed our rule" are different findings:
+# on 2026-10-09 newmodernmom.com was logged as the first when it was the second.
+LAST_SEARCH = {"returned": 0}
+
+
 def hunter_domain_search(domain, key, single_operator=False):
     """Role addresses and business roles, plus the owner of a one-person site.
 
@@ -148,7 +154,9 @@ def hunter_domain_search(domain, key, single_operator=False):
     if status != 200:
         return [], "HTTP {}".format(status)
     out = []
-    for item in (body.get("data") or {}).get("emails", []):
+    emails = (body.get("data") or {}).get("emails", [])
+    LAST_SEARCH["returned"] = len(emails)
+    for item in emails:
         email = item.get("value") or ""
         local = email.split("@")[0].lower()
         position = item.get("position") or ""
@@ -274,6 +282,202 @@ def channel_id_of(url):
     return match.group(1) if match else ""
 
 
+# --- web lane: review sites ---------------------------------------------------
+# Added 2026-10-09 for the curated affiliate-seo-creators list. Same rule as the
+# creator path: the site's own published pages first (free), Hunter second,
+# verification always (CHANGELOG D14 for one-person sites).
+
+JUNK_EMAIL = ("sentry", "wixpress", "example.com", "godaddy", "squarespace", "cloudflare", "jsdelivr",
+              "googleapis", "gstatic", "w3.org", "schema.org", "domain.com", "yourdomain", "noreply",
+              "no-reply", "donotreply", "@2x", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
+              "your@", "name@", "email@", "user@", "wix.com", "bootstrap", "sentry.io")
+NOT_A_PITCH = ("privacy", "abuse", "dmca", "legal", "unsubscribe", "postmaster", "webmaster")
+WEBMAIL = ("gmail.com", "outlook.com", "yahoo.com", "hotmail.com", "icloud.com", "proton.me",
+           "protonmail.com", "me.com", "aol.com", "live.com")
+PITCH_LOCALPART = ("partnerships", "partner", "collabs", "collab", "business", "brands", "pr", "press",
+                   "media", "hello", "hi", "hey", "contact", "team", "info", "editor", "editorial")
+
+
+def _site_root(domain):
+    parts = domain.lower().split(".")
+    return ".".join(parts[-2:])
+
+
+def published_on_site(domain, urls):
+    """Emails the site publishes on its own pages: mailto links and visible text.
+    -> list of (email, page_url, business_cue), best first. No API, no spend."""
+    import site_profile
+    root = _site_root(domain)
+    found = {}
+    for url in urls:
+        if not url:
+            continue
+        status, html = site_profile.fetch(url)
+        if status != 200 or not html:
+            continue
+        text = site_profile.text_of(html)
+        candidates = re.findall(r"mailto:([^\"'?>\s]+)", html, re.I) + EMAIL_RE.findall(text)
+        for raw in candidates:
+            email = urllib.parse.unquote(raw).strip(".,;:()<>[]\"'").lower()
+            if "@" not in email or any(j in email for j in JUNK_EMAIL):
+                continue
+            local, _, host = email.partition("@")
+            if local.split("+")[0] in NOT_A_PITCH:
+                continue
+            i = text.lower().find(email)
+            cue = bool(BUSINESS_CUE.search(text[max(0, i - 120): i + 40])) if i >= 0 else False
+            own = _site_root(host) == root
+            # Their own domain, or a webmail address they published themselves, or
+            # another domain only when they introduce it as the business line
+            # (a manager or agency): anything else on the page may not be theirs.
+            if own or host in WEBMAIL or cue:
+                found.setdefault(email, (url, cue, own))
+    def rank(item):
+        email, (url, cue, own) = item
+        local = email.split("@")[0]
+        return (not own, local not in PITCH_LOCALPART, not cue)
+    return [(e, u, c) for e, (u, c, o) in sorted(found.items(), key=rank)]
+
+
+def hunter_used(key):
+    status, body = fetch(HUNTER + "/account?" + urllib.parse.urlencode({"api_key": key}))
+    if status != 200:
+        return None
+    req = (body.get("data") or {}).get("requests") or {}
+    return ((req.get("searches") or {}).get("used"), (req.get("verifications") or {}).get("used"))
+
+
+def run_sites(args):
+    import csv as _csv
+    src = Path(args.from_sites)
+    rows = list(_csv.DictReader(src.open()))
+    if args.top:
+        rows = rows[:args.top]
+    key = require("HUNTER_API_KEY")
+    slug = args.brand
+
+    # 1. Free pass: what each site publishes itself.
+    from concurrent.futures import ThreadPoolExecutor
+    def pages(r):
+        home = "https://" + r["domain"] + "/"
+        return [r.get("contact_page"), r.get("about_page"), home]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        published = dict(zip([r["domain"] for r in rows],
+                             pool.map(lambda r: published_on_site(r["domain"], pages(r)), rows)))
+    need_hunter = [r for r in rows if not published[r["domain"]]]
+
+    # 2. Budget, now that the real numbers are known.
+    s_code, s_lines = _budget.gate("hunter", len(need_hunter), yes=args.yes, unit="searches")
+    planned_verifs = (len(rows) - len(need_hunter)) + len(need_hunter)
+    v_code, v_lines = _budget.gate("hunter", planned_verifs, yes=True, unit="verifications")
+    print("Contacts · {} · {} sites".format(slug, len(rows)))
+    print("  {} publish an address on their own pages (free) · {} need a Hunter search".format(
+        len(rows) - len(need_hunter), len(need_hunter)))
+    for line in s_lines + v_lines:
+        print("  " + line)
+    if args.dry_run:
+        return 0
+    if v_code == _budget.REFUSE:
+        return v_code
+    if s_code == _budget.CONFIRM:
+        return s_code
+    # A search refusal does not stop the free half: search as many as the cap
+    # allows, in the team's order (most brands reviewed first), queue the rest.
+    cfg = (_budget.budgets().get("hunter") or {})
+    allowed = max(0, (cfg.get("monthly_search_cap") or 0) - _budget.month_used("hunter", unit="searches"))
+    allowed = min(allowed, len(need_hunter))
+    if s_code == _budget.REFUSE:
+        print("  searching the first {} in the team's order; the other {} wait for search budget".format(
+            allowed, len(need_hunter) - allowed))
+    if allowed > (cfg.get("confirm_above") or 0) and not args.yes:
+        print("  STOPPED before spending: {} searches is over the confirm threshold of {}. "
+              "Re-run with --yes.".format(allowed, cfg.get("confirm_above")))
+        return _budget.CONFIRM
+
+    found, measured, searched = {}, [], 0
+    for r in rows:
+        d = r["domain"]
+        pub = published[d]
+        if pub:
+            email, url, cue = pub[0]
+            found[d] = {"email": email, "kind": "site-published", "source": url, "name": "", "role": ""}
+            continue
+        if searched >= allowed:
+            found[d] = None
+            continue
+        single = r.get("tier") == "creator blog" and str(r.get("authors_on_home") or "9") in ("0", "1")
+        before = hunter_used(key)
+        hits, err = hunter_domain_search(d, key, single_operator=single)
+        after = hunter_used(key)
+        searched += 1
+        returned = 0 if err else LAST_SEARCH["returned"]
+        # A counter already at the plan's limit cannot show a charge, so a
+        # zero there proves nothing. Only below the limit is a delta evidence.
+        limit = 50
+        charged = (after[0] - before[0]) if (before and after and after[0] < limit) else None
+        measured.append((d, returned, charged))
+        if hits:
+            found[d] = dict(hits[0], source="Hunter domain search")
+        else:
+            why = ("Hunter error: " + err if err else
+                   "Hunter found nothing" if returned == 0 else
+                   "Hunter found {} address(es); none fit the contact rule".format(returned))
+            found[d] = {"email": "", "kind": "none", "source": why, "name": "", "role": ""}
+
+    # 3. Verify every address found, whatever its source.
+    out, summary, verifs = [], [], 0
+    for r in rows:
+        d, f = r["domain"], found[r["domain"]]
+        base = {"found_at": date.today().isoformat(), "brand": slug, "handle": d, "creator": "",
+                "channel_url": "https://" + d + "/"}
+        if f is None:
+            summary.append({"domain": d, "found_via": "waiting: Hunter search cap reached", "kind": "",
+                            "verify_status": "", "usable": ""})
+            continue
+        if not f["email"]:
+            out.append(dict(base, name="", role="", email="", kind="none", source=f["source"],
+                            verify_status="", verify_score="", usable="no",
+                            notes="nothing published, Hunter found nothing: contact form or skip"))
+            summary.append({"domain": d, "found_via": "nothing found", "kind": "none",
+                            "verify_status": "", "usable": "no"})
+            continue
+        v = hunter_verify(f["email"], key); verifs += 1
+        usable, note = USABLE.get(v["status"], ("decide", v["status"]))
+        out.append(dict(base, name=f.get("name", ""), role=f.get("role", ""), email=f["email"],
+                        kind=f["kind"], source=f["source"], verify_status=v["status"],
+                        verify_score=v["score"], usable=usable, notes=note))
+        summary.append({"domain": d, "found_via": "published on site" if f["kind"] == "site-published"
+                        else "Hunter", "kind": f["kind"], "verify_status": v["status"], "usable": usable})
+        print("  {:<30} {:<30} {:<11} {}".format(d[:30], mask(f["email"])[:30], v["status"], usable))
+
+    if searched:
+        _budget.log("hunter", searched, "searches", "find-contacts", slug, "", "site mode")
+    if verifs:
+        _budget.log("hunter", verifs, "verifications", "find-contacts", slug, "", "site mode")
+    write_rows(out)
+
+    summ = ROOT / "outputs" / slug / (args.slate or date.today().strftime("%Y-%m")) / "contacts-summary.csv"
+    summ.parent.mkdir(parents=True, exist_ok=True)
+    with summ.open("w", newline="") as fh:
+        w = _csv.DictWriter(fh, fieldnames=["domain", "found_via", "kind", "verify_status", "usable"])
+        w.writeheader(); w.writerows(summary)
+
+    from collections import Counter
+    c = Counter(s["usable"] for s in summary)
+    print("\n{} sites · ready to send {} · you decide {} · not usable {} · waiting for Hunter budget {}".format(
+        len(rows), c.get("yes", 0), c.get("decide", 0), c.get("no", 0),
+        sum(1 for s in summary if s["found_via"].startswith("waiting"))))
+    print("Hunter spent: {} searches, {} verifications".format(searched, verifs))
+    empties = [m for m in measured if m[1] == 0 and m[2] is not None]
+    if empties:
+        print("empty searches charged: {} of {} (measured below the plan limit)".format(
+            sum(1 for m in empties if m[2] > 0), len(empties)))
+    elif measured:
+        print("empty-search charging: not measurable this run (no empties below the plan limit)")
+    print("wrote {} (gitignored) and {}".format(CONTACTS.relative_to(ROOT), summ.relative_to(ROOT)))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Find and verify a way to reach each creator.")
     ap.add_argument("--from-shortlist", type=Path, help="a build_shortlist.py workbook")
@@ -285,12 +489,17 @@ def main():
     ap.add_argument("--no-hunter", action="store_true", help="description only; spend no credits")
     ap.add_argument("--verify-only", action="store_true",
                     help="verify addresses already in data/contacts.csv; no lookups")
+    ap.add_argument("--from-sites", type=Path,
+                    help="a curated sites CSV (domain, tier, authors_on_home, contact_page, about_page)")
+    ap.add_argument("--slate", help="output slate for the no-address summary, default this month")
     ap.add_argument("--dry-run", action="store_true", help="plan and budget only")
     ap.add_argument("--yes", action="store_true", help="approve a run over the confirm threshold")
     args = ap.parse_args()
 
     if args.verify_only:
         return verify_only(args.brand, require("HUNTER_API_KEY"), args.yes)
+    if args.from_sites:
+        return run_sites(args)
 
     if args.from_shortlist:
         targets = from_shortlist(args.from_shortlist, args.priority, args.top, args.reviewed)

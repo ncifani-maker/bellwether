@@ -43,14 +43,21 @@ def _provider_cfg(provider: str) -> dict:
     return {k: v for k, v in budgets().get(provider, {}).items() if not k.startswith("_")}
 
 
-def month_used(provider: str, month: str = None) -> int:
-    """Units this calendar month, from Bellwether's own ledger."""
+def month_used(provider: str, month: str = None, unit: str = None) -> int:
+    """Units this calendar month, from Bellwether's own ledger.
+
+    `unit` filters by unit_type. Hunter meters searches and verifications
+    separately; summing both against one cap let a verification run eat the
+    search budget (found 2026-10-09).
+    """
     month = month or date.today().strftime("%Y-%m")
     if not LEDGER.exists():
         return 0
     total = 0
     with LEDGER.open() as fh:
         for row in csv.DictReader(fh):
+            if unit and (row.get("unit_type") or "") != unit:
+                continue
             if row.get("provider") == provider and (row.get("date") or "").startswith(month):
                 try:
                     total += int(float(row.get("units") or 0))
@@ -86,8 +93,16 @@ def gate(provider, planned, remaining=None, yes=False, unit="searches"):
     provider cannot report it, in which case the reserve check is skipped).
     """
     cfg = _provider_cfg(provider)
-    used = month_used(provider)
-    cap = next((v for k, v in cfg.items() if k.endswith("_cap")), None)
+    # A provider can cap each unit separately: monthly_search_cap,
+    # monthly_verification_cap. Use the one naming this unit; otherwise the
+    # provider's single cap, counted over all its units as before.
+    stem = unit.rstrip("s")
+    unit_cap = next((v for k, v in cfg.items() if k.endswith("_cap") and stem in k), None)
+    if unit_cap is not None:
+        cap, used = unit_cap, month_used(provider, unit=unit)
+    else:
+        cap = next((v for k, v in cfg.items() if k.endswith("_cap")), None)
+        used = month_used(provider)
     reserve = cfg.get("reserve")
     confirm_above = cfg.get("confirm_above")
     lines = []

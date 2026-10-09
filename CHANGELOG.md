@@ -5,6 +5,46 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-09 (later) — Contacts for the curated list
+
+**D15. The team's curated list is sourced as curated.** Nicole.
+The team cut 115 to 100 (`briefs/affiliate-seo-creators/shortlist.csv`, saved as the record of the gate).
+Claude flagged 16 more: 4 homonyms (the *Otherland* novel and play, a Delaware student paper's Mosaic
+café), 6 shop or brand blogs, 6 media or listicle sites. Nicole: "just source from the first tab". All 100
+were sourced; the flags stand in this entry, not in the data.
+
+### The run
+`find_contacts.py --from-sites`, new: the site's own contact, about and home pages first (free), Hunter
+domain search for the rest in the team's order, every address verified.
+- 41 of 100 publish an address themselves; 31 verified usable, 5 accept-all for Nicole, 5 not usable.
+- 27 Hunter searches (Bellwether's monthly cap): 17 usable addresses, 10 with nothing usable.
+- **48 ready to send, 5 to decide, 15 not usable, 32 waiting.** Addresses in `data/contacts.csv`
+  (gitignored); `outputs/.../contacts-summary.csv` has none.
+
+### Retracted: "empty Hunter searches are free"
+The first run printed "empty searches charged: 0 of 10". Wrong on both counts. (1) Those ten were not all
+empty: newmodernmom.com returned an address in the morning's test, and this time the contact rule
+filtered it out (the site check counts 2 authors there, so D14's one-person exception did not apply);
+the code logged that as "found nothing". (2) Hunter's counter had reached the plan limit, and a counter
+at its limit cannot move, so zero deltas proved nothing. Fixed: the source now says "found nothing",
+"found N, none fit the contact rule", or "error", and charging is only measured below the limit. The
+question stays open.
+
+### Unexplained Hunter usage
+After the run Hunter showed 50/50 searches and 100/100 verifications used until Oct 20. Bellwether's
+ledger accounts for 30 searches and 63 verifications this cycle (3 + 27; 5 + 58). The rest was not this
+pipeline. The `serp-tracker` session, open at the time, has close-demo's Hunter scripts. The 32 waiting
+sites therefore wait for Hunter's reset on Oct 20, whatever Bellwether's own cap says.
+
+### Fixed along the way
+- `_budget.py`: caps per unit. Hunter searches and verifications were summed against one cap, so a
+  verification run would have eaten the search budget. `budgets.json` gains
+  `monthly_verification_cap: 100`.
+- `site_profile.py`: the about-page finder had returned a plugin stylesheet as mybalancedspace.com's
+  about page; asset paths are skipped.
+
+---
+
 ## 2026-10-09 — Hunter test; contact rule amended
 
 **D14. On a one-person site, the owner's address on the site's own domain is the business contact.** Nicole.

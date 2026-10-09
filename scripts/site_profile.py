@@ -141,9 +141,15 @@ def feed_info(base):
 
 def about_link(domain, html):
     """The about page wherever it lives: /about-nicole-jaques/ is not /about."""
-    m = re.search(r'href=["\'](https?://(?:www\.)?' + re.escape(domain) +
-                  r'/[^"\'#?]*about[^"\'#?]*)["\']', html or "", re.I)
-    return m.group(1) if m else ""
+    for m in re.finditer(r'href=["\'](https?://(?:www\.)?' + re.escape(domain) +
+                         r'/[^"\'#?]*about[^"\'#?]*)["\']', html or "", re.I):
+        url = m.group(1)
+        # Not a stylesheet or a plugin asset: mybalancedspace.com's "about page"
+        # came back as wp-content/plugins/.../widget-about/...css.
+        if "/wp-content/" in url or re.search(r"\.(?:css|js|png|jpe?g|svg|webp|woff2?)$", url, re.I):
+            continue
+        return url
+    return ""
 
 
 def first_ok(base, paths):
