@@ -17,6 +17,9 @@ anything.
   contact (CHANGELOG D14). Still verified, still never guessed.
 - **Every brand is a brief folder**, `briefs/<slug>/`, created from `briefs/_template/`. No script, skill,
   config or template is named after a company, and no script refers to a brand by name (CHANGELOG D4).
+- **A published email is captured at research time** (CHANGELOG D18): when `site_profile.py` finds an
+  address on a site's own pages, it goes in the local workbook's `published email (unverified)` column.
+  Found is not verified; verification still happens at the contact step.
 - **No email address goes to GitHub, ever.** Contacts live in `data/contacts.csv`, which is gitignored and
   stays on this Mac. Spreadsheets stay local too. A pre-commit hook in `.githooks/` refuses any commit that
   adds either (CHANGELOG D16). It is on via `git config core.hooksPath .githooks`; run that again after

@@ -48,6 +48,7 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _emails  # noqa: E402
 import review_sites  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -100,7 +101,6 @@ AFFILIATE_RE = re.compile(r"affiliate link|as an amazon associate|may earn (?:a 
 BYLINE_NAME_RE = re.compile(r"\bby\s+([A-Z][a-z]+\s+[A-Z][a-z]+)")
 YEAR_RE = re.compile(r'datetime=["\'](\d{4})-\d{2}|"datePublished":\s*"(\d{4})-|'
                      r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.? \d{1,2},\s+(\d{4})')
-MAILTO_RE = re.compile(r"mailto:[^\"'?>\s]+@", re.I)
 # Creator storefronts. Nobody at a publication links their personal ShopMy.
 STOREFRONT_RE = re.compile(r"shopmy|liketoknow|\bltk\b|amazon storefront|amazon\.com/shop/|"
                            r"shop my (?:favorites|home|amazon|faves)|my amazon (?:shop|store|finds)", re.I)
@@ -166,7 +166,7 @@ def profile(job):
     status, home = fetch(base + "/")
     out = {"domain": domain, "http": status, "tier": "", "evidence": "", "authors_on_home": 0,
            "latest_year": "", "affiliate_disclosure": "", "about_page": "", "contact_page": "",
-           "published_email": ""}
+           "published_email": "", "published_email_address": ""}
     feed = feed_info(base)
     if status != 200 or not home:
         blocked = "homepage blocked (HTTP {})".format(status or "no answer")
@@ -198,8 +198,12 @@ def profile(job):
         "latest_year": max(years) if years else "",
         "affiliate_disclosure": "yes" if AFFILIATE_RE.search(everything) else "",
         "about_page": about_url, "contact_page": contact_url,
-        "published_email": "yes" if MAILTO_RE.search(home + about + contact) else "",
     })
+    # CHANGELOG D18: a published address is captured as soon as research sees
+    # it. It goes to the LOCAL workbook only; the committed CSV keeps yes/blank.
+    found = _emails.published_emails(domain, [(contact_url, contact), (about_url, about), (base + "/", home)])
+    out["published_email"] = "yes" if found else ""
+    out["published_email_address"] = found[0][0] if found else ""
 
     root = review_sites.root_domain(domain)
     publisher = PUBLISHER_RE.search(everything)
@@ -266,7 +270,11 @@ def main():
         w = csv.DictWriter(fh, fieldnames=fields); w.writeheader()
         for r in rows:
             w.writerow({k: r.get(k, "") for k in fields})
-    xlsx = write_shortlist(raw_path.parent / "creator-shortlist.xlsx", rows, fields, args)
+    # The workbook is local (gitignored; the commit hook refuses spreadsheets),
+    # so it alone carries the address, right after the yes/blank flag.
+    xlsx_fields = fields[:fields.index("published_email") + 1] + ["published_email_address"] + \
+        fields[fields.index("published_email") + 1:]
+    xlsx = write_shortlist(raw_path.parent / "creator-shortlist.xlsx", rows, xlsx_fields, args)
 
     from collections import Counter
     c = Counter(r["tier"] for r in rows)
@@ -280,6 +288,9 @@ def main():
     print("wrote {}".format(csv_path.relative_to(ROOT)))
     print("wrote {}".format(xlsx.relative_to(ROOT)))
     return 0
+
+
+HEADERS = {"published_email_address": "published email (unverified)"}
 
 
 def write_shortlist(out, rows, fields, args):
@@ -298,7 +309,7 @@ def write_shortlist(out, rows, fields, args):
 
     def sheet(title, subset):
         ws = wb.create_sheet(title)
-        ws.append(fields)
+        ws.append([HEADERS.get(f, f) for f in fields])
         for c in ws[1]:
             c.font, c.fill, c.alignment = head, fill, Alignment(wrap_text=True, vertical="center")
         for r in subset:
@@ -325,8 +336,11 @@ def write_shortlist(out, rows, fields, args):
         ("Niche review", "Testing language, a small team, or a review-business domain."),
         ("Media", "A known media domain, or a parent publisher named on the site with several bylines."),
         ("Check by hand", "Blocked, unreachable, or no clear signal. Never guessed: a 403 is not an absence."),
-        ("published_email", "Whether an email is published on the site: yes or blank. The address is not "
-                            "stored here; it is collected at the contact step, after the shortlist gate."),
+        ("published_email", "Yes when the site publishes an email on its own pages."),
+        ("published email (unverified)", "That address, captured at research time (CHANGELOG D18). Not yet "
+                                         "verified: that happens at the contact step, always. Only this "
+                                         "local workbook carries it; the committed site-profiles.csv has "
+                                         "yes/blank."),
         ("Sorted by", "Brands reviewed, most first: a site that reviewed four brands in a category is the "
                       "person to pitch the fifth."),
         ("Built", date.today().isoformat()),

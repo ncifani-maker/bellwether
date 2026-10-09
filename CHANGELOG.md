@@ -5,6 +5,25 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-10 — Published emails captured at research time
+
+**D18. If research finds a published email, it goes in a new column straight away.** Nicole.
+Until now `site_profile.py` only flagged `published_email` yes/blank and left the address for the contact
+step. Now the address itself lands in the local workbook (`creator-shortlist.xlsx`) as
+`published email (unverified)`, right after the flag. Unchanged: the committed `site-profiles.csv` carries
+yes/blank only (D16), and every address is still verified at the contact step before it is used.
+
+### Built
+- `scripts/_emails.py`: the one definition of "an email this site publishes" (own domain, self-published
+  webmail, or a business-cued manager/agency line; junk and privacy@-type addresses dropped), moved out of
+  `find_contacts.py` and now used by both research and the contact step, so they cannot disagree.
+- Tested: the contact step picks the same address as before for 6 of 6 sites; research captures the same
+  address the contact step would; the committed CSV has no address column.
+- Side effect: research previously detected only `mailto:` links. With the shared check it also reads the
+  page text, so future runs will flag more sites as publishing an email.
+
+---
+
 ## 2026-10-09 (evening) — Email addresses stay local
 
 **D16. No document containing an email address is pushed. Contacts stay on this Mac.** Nicole.

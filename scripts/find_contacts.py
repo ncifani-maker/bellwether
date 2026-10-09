@@ -42,6 +42,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _budget  # noqa: E402
+import _emails  # noqa: E402
+from _emails import BUSINESS_CUE, EMAIL_RE  # noqa: E402
 from _keys import get, require  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,12 +55,9 @@ TIMEOUT = 30
 FIELDS = ["found_at", "brand", "handle", "creator", "channel_url", "name", "role", "email",
           "kind", "source", "verify_status", "verify_score", "usable", "notes"]
 
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 URL_RE = re.compile(r"https?://([A-Za-z0-9.\-]+\.[A-Za-z]{2,})(?:/\S*)?")
 # "for business inquiries", "business:", "collabs" — the line a creator writes
 # when they mean "this is the address to pitch me at".
-BUSINESS_CUE = re.compile(r"business|inquir|collab|sponsor|partnership|press|booking|management|"
-                          r"work with me|brand deal", re.I)
 ROLE_LOCALPART = ("hello", "contact", "info", "business", "inquiries", "team", "press",
                   "partnerships", "collabs", "management", "booking", "media", "pr")
 BUSINESS_POSITION = re.compile(r"founder|owner|editor|partner|marketing|manager|talent|brand|"
@@ -287,56 +286,18 @@ def channel_id_of(url):
 # creator path: the site's own published pages first (free), Hunter second,
 # verification always (CHANGELOG D14 for one-person sites).
 
-JUNK_EMAIL = ("sentry", "wixpress", "example.com", "godaddy", "squarespace", "cloudflare", "jsdelivr",
-              "googleapis", "gstatic", "w3.org", "schema.org", "domain.com", "yourdomain", "noreply",
-              "no-reply", "donotreply", "@2x", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
-              "your@", "name@", "email@", "user@", "wix.com", "bootstrap", "sentry.io")
-NOT_A_PITCH = ("privacy", "abuse", "dmca", "legal", "unsubscribe", "postmaster", "webmaster")
-WEBMAIL = ("gmail.com", "outlook.com", "yahoo.com", "hotmail.com", "icloud.com", "proton.me",
-           "protonmail.com", "me.com", "aol.com", "live.com")
-PITCH_LOCALPART = ("partnerships", "partner", "collabs", "collab", "business", "brands", "pr", "press",
-                   "media", "hello", "hi", "hey", "contact", "team", "info", "editor", "editorial")
-
-
-def _site_root(domain):
-    parts = domain.lower().split(".")
-    return ".".join(parts[-2:])
-
-
 def published_on_site(domain, urls):
-    """Emails the site publishes on its own pages: mailto links and visible text.
+    """Emails the site publishes on its own pages. Fetches the pages, then defers
+    to _emails.published_emails, the one definition shared with research.
     -> list of (email, page_url, business_cue), best first. No API, no spend."""
     import site_profile
-    root = _site_root(domain)
-    found = {}
+    pages = []
     for url in urls:
-        if not url:
-            continue
-        status, html = site_profile.fetch(url)
-        if status != 200 or not html:
-            continue
-        text = site_profile.text_of(html)
-        candidates = re.findall(r"mailto:([^\"'?>\s]+)", html, re.I) + EMAIL_RE.findall(text)
-        for raw in candidates:
-            email = urllib.parse.unquote(raw).strip(".,;:()<>[]\"'").lower()
-            if "@" not in email or any(j in email for j in JUNK_EMAIL):
-                continue
-            local, _, host = email.partition("@")
-            if local.split("+")[0] in NOT_A_PITCH:
-                continue
-            i = text.lower().find(email)
-            cue = bool(BUSINESS_CUE.search(text[max(0, i - 120): i + 40])) if i >= 0 else False
-            own = _site_root(host) == root
-            # Their own domain, or a webmail address they published themselves, or
-            # another domain only when they introduce it as the business line
-            # (a manager or agency): anything else on the page may not be theirs.
-            if own or host in WEBMAIL or cue:
-                found.setdefault(email, (url, cue, own))
-    def rank(item):
-        email, (url, cue, own) = item
-        local = email.split("@")[0]
-        return (not own, local not in PITCH_LOCALPART, not cue)
-    return [(e, u, c) for e, (u, c, o) in sorted(found.items(), key=rank)]
+        if url:
+            status, html = site_profile.fetch(url)
+            if status == 200 and html:
+                pages.append((url, html))
+    return _emails.published_emails(domain, pages)
 
 
 def hunter_used(key):
