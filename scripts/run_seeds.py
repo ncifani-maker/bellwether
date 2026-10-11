@@ -73,6 +73,14 @@ def main():
     if not results.exists():
         print("no results at {}: run the scan first".format(results.relative_to(ROOT)))
         return 1
+    if args.dry_run:
+        # --skip-scan --dry-run used to run the free steps anyway; a dry run
+        # should never do anything, free or not.
+        import json
+        n = len(json.loads(results.read_text()))
+        print("dry run: would rebuild from {} saved queries in {}, then profile every kept site. "
+              "No SerpAPI, no spend; just page visits.".format(n, results.parent.relative_to(ROOT)))
+        return 0
     for step in (["review_sites.py", args.slug, "--slate", args.slate],
                  ["site_profile.py", args.slug, "--slate", args.slate]):
         code = run([SCRIPTS / step[0]] + step[1:])
