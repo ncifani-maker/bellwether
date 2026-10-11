@@ -5,6 +5,32 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-11 — AI crawler access at research time
+
+**D19. Research records whether ChatGPT and Claude can read each site.** Nicole's idea.
+A placement on a page that AI answer engines can't read is worth less to a buyer who asks them. Read
+from each site's robots.txt, against the page that actually ranked, not just the homepage. Three columns
+in `site_profile.py`, so in `/run-seeds` output and the committed `site-profiles.csv` (no personal data):
+
+- `ai_search`: can the SEARCH crawlers read it? `yes` / `no` / `fetch-only` (search crawler blocked,
+  user-requested fetcher allowed). This decides citation in answers now.
+- `ai_training`: which TRAINING crawlers are blocked. Future models, not today's answers.
+- `cdn`: `cloudflare` when the site is behind it, since the edge can block AI bots whatever robots.txt
+  says. When the edge also refused our own browser-like fetch, `ai_search` says so.
+
+Bot names from the companies' own pages, checked today: OpenAI's OAI-SearchBot (blocked sites "won't
+appear in ChatGPT search answers"), ChatGPT-User (user fetches; "robots.txt rules may not apply"),
+GPTBot (training); Anthropic's Claude-SearchBot (search indexing), Claude-User (user fetches),
+ClaudeBot (training). Search and training are separate on purpose: healthline.com blocks training and
+allows search, so a single "blocked" column would have called a citable site blocked.
+
+Rules: a robots.txt that refuses our check is `unknown`, not blocked; no robots.txt means allowed. It
+is stated policy, not proof, and allowed is not cited. Tested on six synthetic robots.txt files with
+known answers (one expected value was wrong in the test, not the code) and on real sites: nytimes.com
+and mashable.com block search and training; the creator blogs allow everything.
+
+---
+
 ## 2026-10-10 (evening) — /create-seeds
 
 ### Built

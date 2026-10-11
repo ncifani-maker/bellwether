@@ -123,6 +123,62 @@ def fetch(url):
         return 0, ""
 
 
+# AI crawlers, per OpenAI's and Anthropic's own documentation (checked 2026-10-11).
+# SEARCH bots decide whether a page can be cited in an answer now; TRAINING bots
+# only decide what future models learn. A site can block one and allow the other.
+#   OpenAI:    OAI-SearchBot  "won't appear in ChatGPT search answers" if blocked
+#              ChatGPT-User   user-requested fetch; "robots.txt rules may not apply"
+#              GPTBot         training
+#   Anthropic: Claude-SearchBot  search indexing; blocked = "lower visibility"
+#              Claude-User       user-requested fetch; blocked "may reduce visibility"
+#              ClaudeBot         training
+AI_SEARCH = {"ChatGPT": ("OAI-SearchBot", "ChatGPT-User"), "Claude": ("Claude-SearchBot", "Claude-User")}
+AI_TRAINING = ["GPTBot", "ClaudeBot"]
+
+
+def fetch_with_headers(url):
+    req = urllib.request.Request(url, headers=UA)
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            return resp.getcode(), resp.read(300_000).decode("utf-8", "replace"), dict(resp.headers)
+    except urllib.error.HTTPError as exc:
+        return exc.code, "", dict(exc.headers or {})
+    except Exception:
+        return 0, "", {}
+
+
+def ai_access(domain, page_url):
+    """robots.txt read against the page that actually ranked. -> (ai_search, ai_training, cdn).
+
+    Stated policy, not proof: robots.txt is advisory, Cloudflare can block AI
+    bots at the network edge without a word in robots.txt (hence `cdn`), and
+    allowed is not the same as cited.
+    """
+    import urllib.robotparser
+    status, text, headers = fetch_with_headers("https://" + domain + "/robots.txt")
+    low = {k.lower(): v for k, v in headers.items()}
+    cdn = "cloudflare" if ("cloudflare" in (low.get("server") or "").lower() or "cf-ray" in low) else ""
+    if status in (401, 403):
+        return "unknown: robots.txt refused our check", "unknown", cdn
+    if status == 0 or status >= 500:
+        return "unknown: robots.txt unreachable", "unknown", cdn
+    if status != 200 or "<html" in text[:600].lower():
+        return "ChatGPT yes · Claude yes (no robots.txt)", "allowed (no robots.txt)", cdn
+    rp = urllib.robotparser.RobotFileParser()
+    rp.parse(text.splitlines())
+    url = page_url or "https://" + domain + "/"
+    parts = []
+    for name, (search_bot, user_bot) in AI_SEARCH.items():
+        if rp.can_fetch(search_bot, url):
+            parts.append(name + " yes")
+        elif rp.can_fetch(user_bot, url):
+            parts.append(name + " fetch-only")
+        else:
+            parts.append(name + " no")
+    blocked = [b for b in AI_TRAINING if not rp.can_fetch(b, url)]
+    return " · ".join(parts), ("blocks " + ", ".join(blocked) if blocked else "allowed"), cdn
+
+
 def text_of(html):
     return re.sub(r"\s+", " ", TAG_RE.sub(" ", html or ""))
 
@@ -161,12 +217,20 @@ def first_ok(base, paths):
 
 
 def profile(job):
-    domain, title = job if isinstance(job, tuple) else (job, "")
+    if isinstance(job, tuple):
+        domain, title, page_url = (job + ("",))[:3]
+    else:
+        domain, title, page_url = job, "", ""
     base = "https://" + domain
     status, home = fetch(base + "/")
     out = {"domain": domain, "http": status, "tier": "", "evidence": "", "authors_on_home": 0,
            "latest_year": "", "affiliate_disclosure": "", "about_page": "", "contact_page": "",
            "published_email": "", "published_email_address": ""}
+    out["ai_search"], out["ai_training"], out["cdn"] = ai_access(domain, page_url)
+    # robots.txt can say yes while the network edge says no. If the edge refused
+    # even our browser-like request, AI crawlers very likely meet the same wall.
+    if status in (401, 403, 429) and out["cdn"] and not out["ai_search"].startswith("unknown"):
+        out["ai_search"] += " · but the edge refused our fetch (HTTP {}): bots may be blocked".format(status)
     feed = feed_info(base)
     if status != 200 or not home:
         blocked = "homepage blocked (HTTP {})".format(status or "no answer")
@@ -250,7 +314,7 @@ def main():
     args = ap.parse_args()
 
     raw_path, _, ranked, _, _ = review_sites.collect(args.slug, args.slate)
-    jobs = [(d, s["example"]["title"]) for d, s in ranked]
+    jobs = [(d, s["example"]["title"], s["example"]["url"]) for d, s in ranked]
     sys.stderr.write("profiling {} sites, {} at a time (no API calls)\n".format(len(jobs), args.workers))
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         profiles = {p["domain"]: p for p in pool.map(profile, jobs)}
@@ -262,7 +326,8 @@ def main():
                          brands=", ".join(s["brands"]), example_title=s["example"]["title"],
                          example_url=s["example"]["url"]))
 
-    fields = ["domain", "tier", "evidence", "brands_reviewed", "categories", "brands", "authors_on_home",
+    fields = ["domain", "tier", "evidence", "brands_reviewed", "categories", "brands",
+              "ai_search", "ai_training", "cdn", "authors_on_home",
               "latest_year", "affiliate_disclosure", "about_page", "contact_page", "published_email",
               "http", "example_title", "example_url"]
     csv_path = raw_path.parent / "site-profiles.csv"
@@ -341,6 +406,14 @@ def write_shortlist(out, rows, fields, args):
                                          "verified: that happens at the contact step, always. Only this "
                                          "local workbook carries it; the committed site-profiles.csv has "
                                          "yes/blank."),
+        ("ai_search", "Can ChatGPT's and Claude's SEARCH crawlers (OAI-SearchBot, Claude-SearchBot) read the "
+                      "page that ranked, per its robots.txt? yes / no / fetch-only (only the user-requested "
+                      "fetcher is allowed). This is what decides whether the page can be cited in an answer now."),
+        ("ai_training", "Whether robots.txt blocks the TRAINING crawlers (GPTBot, ClaudeBot). Affects what future "
+                        "models learn, not today's citations."),
+        ("cdn", "cloudflare = the site sits behind Cloudflare, which can block AI bots at the network edge "
+                "whatever robots.txt says. A caution, not a verdict. robots.txt is stated policy, not proof, "
+                "and allowed is not the same as cited."),
         ("Sorted by", "Brands reviewed, most first: a site that reviewed four brands in a category is the "
                       "person to pitch the fifth."),
         ("Built", date.today().isoformat()),

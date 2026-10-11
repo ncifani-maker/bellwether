@@ -35,6 +35,7 @@ Check by hand, Media set aside, with each row's evidence and any published email
 `published email (unverified)`. It stays local; spreadsheets never go to GitHub (CHANGELOG D16).
 `review-sites.xlsx` holds everything kept and every skip with its reason.
 
-Report the counts per tier, how many publish an email, and the next step: the team curates
+Report the counts per tier, how many publish an email, how many can be read by ChatGPT and Claude
+search (`ai_search`; say how many are `no` or edge-blocked), and the next step: the team curates
 "For the team", then `/fetch-emails` on the CSV they export. Keep any email address masked
 (`h***@domain.com`) in the reply.

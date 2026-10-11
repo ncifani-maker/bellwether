@@ -49,7 +49,7 @@ vendor/youtube-scout/  pinned upstream; local patches in patches/
 | --- | --- |
 | `/create-seeds <slug>` | 1: draft a seed list (category or brand-review) as `proposed`, optional volume/CPC, record approvals and retirements |
 | `/import-seeds <file> <slug>` | 1: a seed spreadsheet (.xlsx/.csv) into `briefs/<slug>/seeds.csv`. Free. |
-| `/run-seeds <slug>` | 2a + 3: scan approved seeds, keep reviews, tier sites, capture published emails |
+| `/run-seeds <slug>` | 2a + 3: scan approved seeds, keep reviews, tier sites, capture published emails, check AI crawler access |
 | `/fetch-emails <csv> <slug>` | 4: contacts for the team's curated list, handed back in their own CSV |
 | `/api-check` | Keys present, valid, what's left. Free. |
 | `/serp-scan <slug>` | 2a: approved seeds → candidate partner domains (SerpAPI, capped) |
