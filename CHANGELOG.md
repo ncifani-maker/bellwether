@@ -15,6 +15,14 @@ pre-commit hook refuses email addresses, and the script asks git whether the fil
 writing it, and refuses if not (a renamed file can't slip through). Tested: written, invisible to
 `git status`, and a non-matching name is refused. Supersedes D16's "never writes into the repo".
 
+**Re-filling a sheet the team already works in.** The team's "For outreach" export came back with the
+first run's columns pasted in (32 rows still "waiting"). `emails_into_sheet.py` used to refuse a sheet
+that already had an `email` column; it now fills it in place. Blank cells get the address; a cell the
+team filled is never overwritten (a different address is printed as "check it"); the status column is
+refreshed only where it still holds one of the script's own statuses, so a team note survives.
+`--status-column` names that column when it isn't "email status" (theirs is headed `contact_page`).
+Tested both guards on a throwaway copy. Result on the real sheet: exactly the 32 waiting rows changed.
+
 ---
 
 ## 2026-10-22 — Hunter reset: the last 32 contacts

@@ -26,6 +26,10 @@ python3 "${CLAUDE_SKILL_DIR}/../../../scripts/emails_into_sheet.py" "<csv>" --br
    every other output (D21): same rows, same order, original columns untouched, plus `email` and
    `email status`. Only verified or accept-all addresses are filled; bounced ones are left blank on
    purpose. Gitignored, and the script checks that before writing. Tell Nicole the full path.
+   If their sheet already has an `email` column (a working copy from an earlier pass), it is filled
+   in place: blanks only, never over the team's own entries, and the status refreshed only where it
+   is still one of ours. Point `--status-column` at their status column if it has another name;
+   check which column actually holds statuses before assuming.
 
 **The contact rule** (`CLAUDE.md`): the site's own published pages or Hunter; role or business
 addresses, or the owner's address on a one-person site's own domain (D14); every address verified;
