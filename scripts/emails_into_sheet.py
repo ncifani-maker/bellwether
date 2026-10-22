@@ -44,6 +44,8 @@ def status_for(c):
         return c["email"], "verified"
     if c["usable"] == "decide":
         return c["email"], "unconfirmed: domain accepts all mail"
+    if c["usable"] == "pending":
+        return "", "found, not yet verified"
     return "", {"invalid": "bounces (verifier: invalid)", "unknown": "unverifiable"}.get(
         c["verify_status"], "not usable: " + (c["verify_status"] or "?"))
 

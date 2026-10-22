@@ -30,7 +30,9 @@
     "confirm_above": 20
   },
   "hunter": {
-    "monthly_search_cap": 30,
+    "_cycle": "Counted from the 20th, Hunter's own reset day, not the calendar month (D20, Nicole 2026-10-22).",
+    "cycle_reset_day": 20,
+    "monthly_search_cap": 40,
     "monthly_verification_cap": 100,
     "confirm_above": 10,
     "always_verify": true

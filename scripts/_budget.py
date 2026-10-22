@@ -43,6 +43,25 @@ def _provider_cfg(provider: str) -> dict:
     return {k: v for k, v in budgets().get(provider, {}).items() if not k.startswith("_")}
 
 
+def window_start(provider: str) -> str:
+    """First day of the provider's current billing window, as YYYY-MM-DD.
+
+    Calendar month by default. A provider with `cycle_reset_day` counts from
+    that day instead, so Bellwether's cap lines up with the provider's own
+    reset: Hunter resets on the 20th, and counting by calendar month had left
+    a fresh Hunter cycle unusable until the 1st (CHANGELOG D20).
+    """
+    from datetime import timedelta
+    today = date.today()
+    day = _provider_cfg(provider).get("cycle_reset_day")
+    if not day:
+        return today.replace(day=1).isoformat()
+    if today.day >= day:
+        return today.replace(day=day).isoformat()
+    last_month_end = today.replace(day=1) - timedelta(days=1)
+    return last_month_end.replace(day=min(day, last_month_end.day)).isoformat()
+
+
 def month_used(provider: str, month: str = None, unit: str = None) -> int:
     """Units this calendar month, from Bellwether's own ledger.
 
@@ -50,7 +69,7 @@ def month_used(provider: str, month: str = None, unit: str = None) -> int:
     separately; summing both against one cap let a verification run eat the
     search budget (found 2026-10-09).
     """
-    month = month or date.today().strftime("%Y-%m")
+    start = None if month else window_start(provider)
     if not LEDGER.exists():
         return 0
     total = 0
@@ -58,7 +77,9 @@ def month_used(provider: str, month: str = None, unit: str = None) -> int:
         for row in csv.DictReader(fh):
             if unit and (row.get("unit_type") or "") != unit:
                 continue
-            if row.get("provider") == provider and (row.get("date") or "").startswith(month):
+            when = row.get("date") or ""
+            in_window = when.startswith(month) if month else when >= start
+            if row.get("provider") == provider and in_window:
                 try:
                     total += int(float(row.get("units") or 0))
                 except ValueError:
@@ -96,7 +117,10 @@ def gate(provider, planned, remaining=None, yes=False, unit="searches"):
     # A provider can cap each unit separately: monthly_search_cap,
     # monthly_verification_cap. Use the one naming this unit; otherwise the
     # provider's single cap, counted over all its units as before.
-    stem = unit.rstrip("s")
+    # Singular forms spelled out: unit.rstrip("s") turned "searches" into
+    # "searche", matched no cap, and counted verifications as searches
+    # (caught 2026-10-22, when it read "88 of 30 searches").
+    stem = {"searches": "search", "verifications": "verification", "units": "unit"}.get(unit, unit.rstrip("s"))
     unit_cap = next((v for k, v in cfg.items() if k.endswith("_cap") and stem in k), None)
     if unit_cap is not None:
         cap, used = unit_cap, month_used(provider, unit=unit)
@@ -110,7 +134,8 @@ def gate(provider, planned, remaining=None, yes=False, unit="searches"):
     if remaining is not None:
         lines.append("account: {:,} {} left".format(remaining, unit))
     if cap is not None:
-        lines.append("bellwether this month: {:,} of {:,} {} used".format(used, cap, unit))
+        since = "since " + window_start(provider) if cfg.get("cycle_reset_day") else "this month"
+        lines.append("bellwether {}: {:,} of {:,} {} used".format(since, used, cap, unit))
     lines.append("this run: {:,} {}".format(planned, unit))
 
     if remaining is not None and reserve is not None and remaining - planned < reserve:

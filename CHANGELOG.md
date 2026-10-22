@@ -5,6 +5,42 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-22 — Hunter reset: the last 32 contacts
+
+**D20. Bellwether's Hunter budget counts from the 20th, Hunter's own reset day, with a 40-search cap.**
+Nicole. The cap counted by calendar month, so October's 30 searches blocked a fresh Hunter cycle (reset
+Oct 20) until Nov 1. `config/budgets.json` gains `cycle_reset_day: 20` and `_budget.window_start()`;
+SerpAPI still counts by calendar month. 40 of Hunter's 50 leaves room for anything else on the account.
+
+### The run
+The 32 sites waiting since Oct 9: 32 searches, 18 verifications. 16 verified, 1 accept-all, 15 nothing
+usable (12 where Hunter found nothing, 2 where it found a personal address on a multi-author site, which
+D14 does not cover). **The whole list of 100: 64 verified, 6 to decide, 30 nothing usable.** Nicole has
+the team CSV back with emails filled (Downloads, local only).
+
+### Caught before or during the run
+- **Re-running a list redid every site.** `find_contacts --from-sites` had no memory of what was already
+  resolved: it would have re-verified the 41 published addresses and re-searched 27 sites, about 60
+  credits for nothing. Resolved sites are now skipped; `--refresh` redoes them.
+- **`_budget` counted verifications as searches** ("88 of 30 searches"). The per-unit cap lookup turned
+  "searches" into "searche", matched nothing, and fell back to counting every Hunter unit. Fixed; the
+  earlier test passed only because no verifications had been logged yet.
+- **The run detached from its terminal mid-way** (the shell exited 144; the process kept going) and only
+  saved because it happened to finish. Saving and spend logging now sit in a `finally`: an interrupted
+  run keeps verified rows, keeps found-but-unchecked addresses as `pending` for `--verify-only`, and logs
+  what it sent. Tested with a fake Hunter and a forced interruption.
+- **The summary file covered only the latest batch**, so this run had cut it from 100 sites to 32. It is
+  now built from `data/contacts.csv` for the whole list, and was rebuilt.
+- **The empty-search measurement was lost** with that terminal, because it was only printed. It now goes
+  to `outputs/<slug>/<slate>/hunter-charges.csv` (domains and counts, no addresses). Still open.
+
+### Unexplained, again
+Hunter shows 29 searches and 58 verifications used since the reset; Bellwether's ledger has 32 and 18.
+Fewer searches than sent (some empties free, or counter lag), and 40 verifications that were not this
+pipeline, the same pattern as last cycle.
+
+---
+
 ## 2026-10-11 — AI crawler access at research time
 
 **D19. Research records whether ChatGPT and Claude can read each site.** Nicole's idea.

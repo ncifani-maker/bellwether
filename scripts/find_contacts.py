@@ -311,9 +311,25 @@ def hunter_used(key):
 def run_sites(args):
     import csv as _csv
     src = Path(args.from_sites)
-    rows = list(_csv.DictReader(src.open()))
+    rows = list(_csv.DictReader(src.open(encoding="utf-8-sig")))
+    all_domains = [r["domain"].strip() for r in rows]
+    # Skip sites this brief has already resolved, whatever the outcome (an
+    # address, or a search that found nothing). Re-running the same list after
+    # a Hunter reset would otherwise re-verify and re-search every one of them:
+    # caught 2026-10-22 before it spent ~60 credits. --refresh redoes them.
+    if not args.refresh and CONTACTS.exists():
+        with CONTACTS.open() as fh:
+            resolved = {r["handle"] for r in _csv.DictReader(fh) if r.get("brand") == args.brand}
+        before = len(rows)
+        rows = [r for r in rows if r["domain"].strip() not in resolved]
+        if before != len(rows):
+            print("  skipping {} site(s) already resolved for {} (--refresh to redo)".format(
+                before - len(rows), args.brand))
     if args.top:
         rows = rows[:args.top]
+    if not rows:
+        print("nothing left to look up for {}".format(args.brand))
+        return 0
     key = require("HUNTER_API_KEY")
     slug = args.brand
 
@@ -356,77 +372,117 @@ def run_sites(args):
         return _budget.CONFIRM
 
     found, measured, searched = {}, [], 0
-    for r in rows:
-        d = r["domain"]
-        pub = published[d]
-        if pub:
-            email, url, cue = pub[0]
-            found[d] = {"email": email, "kind": "site-published", "source": url, "name": "", "role": ""}
-            continue
-        if searched >= allowed:
-            found[d] = None
-            continue
-        single = r.get("tier") == "creator blog" and str(r.get("authors_on_home") or "9") in ("0", "1")
-        before = hunter_used(key)
-        hits, err = hunter_domain_search(d, key, single_operator=single)
-        after = hunter_used(key)
-        searched += 1
-        returned = 0 if err else LAST_SEARCH["returned"]
-        # A counter already at the plan's limit cannot show a charge, so a
-        # zero there proves nothing. Only below the limit is a delta evidence.
-        limit = 50
-        charged = (after[0] - before[0]) if (before and after and after[0] < limit) else None
-        measured.append((d, returned, charged))
-        if hits:
-            found[d] = dict(hits[0], source="Hunter domain search")
-        else:
-            why = ("Hunter error: " + err if err else
-                   "Hunter found nothing" if returned == 0 else
-                   "Hunter found {} address(es); none fit the contact rule".format(returned))
-            found[d] = {"email": "", "kind": "none", "source": why, "name": "", "role": ""}
+    out, verifs = [], 0
+    today = date.today().isoformat()
 
-    # 3. Verify every address found, whatever its source.
-    out, summary, verifs = [], [], 0
-    for r in rows:
-        d, f = r["domain"], found[r["domain"]]
-        base = {"found_at": date.today().isoformat(), "brand": slug, "handle": d, "creator": "",
-                "channel_url": "https://" + d + "/"}
-        if f is None:
+    def base(d):
+        return {"found_at": today, "brand": slug, "handle": d, "creator": "", "channel_url": "https://" + d + "/"}
+
+    try:
+        for r in rows:
+            d = r["domain"]
+            pub = published[d]
+            if pub:
+                email, url, cue = pub[0]
+                found[d] = {"email": email, "kind": "site-published", "source": url, "name": "", "role": ""}
+                continue
+            if searched >= allowed:
+                found[d] = None
+                continue
+            single = r.get("tier") == "creator blog" and str(r.get("authors_on_home") or "9") in ("0", "1")
+            before = hunter_used(key)
+            hits, err = hunter_domain_search(d, key, single_operator=single)
+            after = hunter_used(key)
+            searched += 1
+            returned = 0 if err else LAST_SEARCH["returned"]
+            # A counter already at the plan's limit cannot show a charge, so a
+            # zero there proves nothing. Only below the limit is a delta evidence.
+            charged = (after[0] - before[0]) if (before and after and after[0] < 50) else None
+            measured.append((d, returned, charged))
+            if hits:
+                found[d] = dict(hits[0], source="Hunter domain search")
+            else:
+                why = ("Hunter error: " + err if err else
+                       "Hunter found nothing" if returned == 0 else
+                       "Hunter found {} address(es); none fit the contact rule".format(returned))
+                found[d] = {"email": "", "kind": "none", "source": why, "name": "", "role": ""}
+
+        # 3. Verify every address found, whatever its source.
+        for r in rows:
+            d, f = r["domain"], found.get(r["domain"])
+            if not f or not f["email"]:
+                continue
+            v = hunter_verify(f["email"], key); verifs += 1
+            usable, note = USABLE.get(v["status"], ("decide", v["status"]))
+            out.append(dict(base(d), name=f.get("name", ""), role=f.get("role", ""), email=f["email"],
+                            kind=f["kind"], source=f["source"], verify_status=v["status"],
+                            verify_score=v["score"], usable=usable, notes=note))
+            print("  {:<30} {:<30} {:<11} {}".format(d[:30], mask(f["email"])[:30], v["status"], usable),
+                  flush=True)
+    finally:
+        # Runs even if the process is interrupted, so paid results are never lost
+        # (2026-10-22: a run detached from its terminal and only saved by luck).
+        # Found-but-unverified addresses are kept as `pending`; --verify-only
+        # finishes them. Spend is logged for whatever was actually sent.
+        done = {o["handle"] for o in out}
+        for d, f in found.items():
+            if not f or d in done:
+                continue
+            if f["email"]:
+                out.append(dict(base(d), name=f.get("name", ""), role=f.get("role", ""), email=f["email"],
+                                kind=f["kind"], source=f["source"], verify_status="not checked",
+                                verify_score="", usable="pending",
+                                notes="found, not yet verified: run --verify-only"))
+            else:
+                out.append(dict(base(d), name="", role="", email="", kind="none", source=f["source"],
+                                verify_status="", verify_score="", usable="no",
+                                notes="nothing published, Hunter found nothing usable: contact form or skip"))
+        if searched:
+            _budget.log("hunter", searched, "searches", "find-contacts", slug, "", "site mode")
+        if verifs:
+            _budget.log("hunter", verifs, "verifications", "find-contacts", slug, "", "site mode")
+        write_rows(out)
+        out_dir = ROOT / "outputs" / slug / (args.slate or today[:7])
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if measured:
+            # Kept on disk, not just printed: the 2026-10-22 measurement was lost
+            # with a dead terminal. Domains and counts only, no addresses.
+            log_path = out_dir / "hunter-charges.csv"
+            new_log = not log_path.exists()
+            with log_path.open("a", newline="") as fh:
+                w = _csv.writer(fh)
+                if new_log:
+                    w.writerow(["date", "domain", "addresses_returned", "credits_charged"])
+                for d, n, ch in measured:
+                    w.writerow([today, d, n, "" if ch is None else ch])
+
+    # The summary covers the WHOLE list, from data/contacts.csv, not just this
+    # run's sites (a re-run used to overwrite it with the latest batch only).
+    with CONTACTS.open() as fh:
+        known = {r["handle"]: r for r in _csv.DictReader(fh) if r.get("brand") == slug}
+    summary = []
+    for d in all_domains:
+        k = known.get(d)
+        if k is None:
             summary.append({"domain": d, "found_via": "waiting: Hunter search cap reached", "kind": "",
                             "verify_status": "", "usable": ""})
-            continue
-        if not f["email"]:
-            out.append(dict(base, name="", role="", email="", kind="none", source=f["source"],
-                            verify_status="", verify_score="", usable="no",
-                            notes="nothing published, Hunter found nothing: contact form or skip"))
+        elif k["kind"] == "none":
             summary.append({"domain": d, "found_via": "nothing found", "kind": "none",
                             "verify_status": "", "usable": "no"})
-            continue
-        v = hunter_verify(f["email"], key); verifs += 1
-        usable, note = USABLE.get(v["status"], ("decide", v["status"]))
-        out.append(dict(base, name=f.get("name", ""), role=f.get("role", ""), email=f["email"],
-                        kind=f["kind"], source=f["source"], verify_status=v["status"],
-                        verify_score=v["score"], usable=usable, notes=note))
-        summary.append({"domain": d, "found_via": "published on site" if f["kind"] == "site-published"
-                        else "Hunter", "kind": f["kind"], "verify_status": v["status"], "usable": usable})
-        print("  {:<30} {:<30} {:<11} {}".format(d[:30], mask(f["email"])[:30], v["status"], usable))
-
-    if searched:
-        _budget.log("hunter", searched, "searches", "find-contacts", slug, "", "site mode")
-    if verifs:
-        _budget.log("hunter", verifs, "verifications", "find-contacts", slug, "", "site mode")
-    write_rows(out)
-
-    summ = ROOT / "outputs" / slug / (args.slate or date.today().strftime("%Y-%m")) / "contacts-summary.csv"
-    summ.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            summary.append({"domain": d, "found_via": "published on site" if k["kind"] == "site-published"
+                            else "Hunter", "kind": k["kind"], "verify_status": k["verify_status"],
+                            "usable": k["usable"]})
+    summ = out_dir / "contacts-summary.csv"
     with summ.open("w", newline="") as fh:
         w = _csv.DictWriter(fh, fieldnames=["domain", "found_via", "kind", "verify_status", "usable"])
         w.writeheader(); w.writerows(summary)
 
     from collections import Counter
     c = Counter(s["usable"] for s in summary)
-    print("\n{} sites · ready to send {} · you decide {} · not usable {} · waiting for Hunter budget {}".format(
-        len(rows), c.get("yes", 0), c.get("decide", 0), c.get("no", 0),
+    print("\n{} looked up now · whole list of {}: ready to send {} · you decide {} · not usable {} · "
+          "pending {} · waiting for Hunter budget {}".format(
+        len(rows), len(summary), c.get("yes", 0), c.get("decide", 0), c.get("no", 0), c.get("pending", 0),
         sum(1 for s in summary if s["found_via"].startswith("waiting"))))
     print("Hunter spent: {} searches, {} verifications".format(searched, verifs))
     empties = [m for m in measured if m[1] == 0 and m[2] is not None]
@@ -453,6 +509,8 @@ def main():
     ap.add_argument("--from-sites", type=Path,
                     help="a curated sites CSV (domain, tier, authors_on_home, contact_page, about_page)")
     ap.add_argument("--slate", help="output slate for the no-address summary, default this month")
+    ap.add_argument("--refresh", action="store_true",
+                    help="site mode: redo sites already resolved in data/contacts.csv")
     ap.add_argument("--dry-run", action="store_true", help="plan and budget only")
     ap.add_argument("--yes", action="store_true", help="approve a run over the confirm threshold")
     args = ap.parse_args()
