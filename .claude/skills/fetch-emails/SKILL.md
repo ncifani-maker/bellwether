@@ -22,9 +22,10 @@ python3 "${CLAUDE_SKILL_DIR}/../../../scripts/emails_into_sheet.py" "<csv>" --br
 2. **The run.** Published addresses first, a Hunter search only for the rest, in the list's order,
    and every address verified. Exit 3 means it is over the confirm threshold: ask, then `--yes`.
    If the monthly search cap is hit, the rest are queued as "waiting", not dropped.
-3. **Back into their sheet.** Writes `<name> (with emails).csv` next to their file: same rows, same
-   order, original columns untouched, plus `email` and `email status`. Only verified or accept-all
-   addresses are filled; bounced ones are left blank on purpose.
+3. **Back into their sheet.** Writes `<name> (with emails).csv` to `outputs/<slug>/<slate>/`, with
+   every other output (D21): same rows, same order, original columns untouched, plus `email` and
+   `email status`. Only verified or accept-all addresses are filled; bounced ones are left blank on
+   purpose. Gitignored, and the script checks that before writing. Tell Nicole the full path.
 
 **The contact rule** (`CLAUDE.md`): the site's own published pages or Hunter; role or business
 addresses, or the owner's address on a one-person site's own domain (D14); every address verified;

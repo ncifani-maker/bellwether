@@ -15,9 +15,11 @@ Same rows, same order, original columns untouched, so a column pasted back
 lines up. Addresses that failed verification are left out on purpose: a dead
 address in a working file looks exactly like a live one.
 
-The copy is written next to the source, never into this repo (CHANGELOG D16).
-If the source is inside the repo, the copy goes to ~/Downloads instead. The
-source file is only read.
+The copy goes to outputs/<brief>/<slate>/, with every other output (CHANGELOG
+D21, Nicole). That folder is inside the repo, so before writing, git is asked
+whether the file is ignored; if it is not, nothing is written. `.gitignore`
+covers "*with emails*.csv" and the pre-commit hook refuses email addresses,
+so the copy cannot reach GitHub (D16). The source file is only read.
 
 Usage:
   python3 scripts/emails_into_sheet.py "~/Downloads/Team list.csv" --brand affiliate-seo-creators
@@ -54,6 +56,8 @@ def main():
     ap = argparse.ArgumentParser(description="Add email columns to the team's CSV, as a copy.")
     ap.add_argument("file", type=Path, help="the team's exported CSV")
     ap.add_argument("--brand", required=True, help="brief slug the contacts were sourced under")
+    ap.add_argument("--slate", default=__import__("datetime").date.today().strftime("%Y-%m"),
+                    help="output folder under outputs/<brief>/, default this month")
     args = ap.parse_args()
 
     src = args.file.expanduser().resolve()
@@ -70,10 +74,16 @@ def main():
     with CONTACTS.open() as fh:
         contacts = {r["handle"]: r for r in csv.DictReader(fh) if r["brand"] == args.brand}
 
-    out_dir = src.parent
-    if ROOT in src.parents:
-        out_dir = Path.home() / "Downloads"   # never write addresses into the repo
+    out_dir = ROOT / "outputs" / args.brand / args.slate
+    out_dir.mkdir(parents=True, exist_ok=True)
     dst = out_dir / (src.stem + " (with emails).csv")
+    # Third safeguard after .gitignore and the hook: refuse to write a file of
+    # addresses into the repo unless git confirms it will ignore it.
+    import subprocess
+    ignored = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "-q", str(dst)]).returncode == 0
+    if not ignored:
+        sys.exit("refusing to write {}: git would not ignore it, so the addresses could be committed. "
+                 "Check .gitignore covers '*with emails*.csv'.".format(dst.relative_to(ROOT)))
 
     out = []
     for r in rows:

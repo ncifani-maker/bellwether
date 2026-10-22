@@ -5,6 +5,18 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-22 (later) — Outputs live in the repo's outputs folder
+
+**D21. Future outputs go in `bellwether-2.0/outputs/`, not Downloads.** Nicole.
+Including the files handed back to her: `emails_into_sheet.py` now writes
+`outputs/<brief>/<slate>/<name> (with emails).csv` instead of next to the source. Because that folder is
+inside the repo, the D16 protections now matter on every run: `.gitignore` covers `*with emails*.csv`, the
+pre-commit hook refuses email addresses, and the script asks git whether the file is ignored before
+writing it, and refuses if not (a renamed file can't slip through). Tested: written, invisible to
+`git status`, and a non-matching name is refused. Supersedes D16's "never writes into the repo".
+
+---
+
 ## 2026-10-22 — Hunter reset: the last 32 contacts
 
 **D20. Bellwether's Hunter budget counts from the 20th, Hunter's own reset day, with a 40-search cap.**
