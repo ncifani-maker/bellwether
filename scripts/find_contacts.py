@@ -400,7 +400,9 @@ def run_sites(args):
             charged = (after[0] - before[0]) if (before and after and after[0] < 50) else None
             measured.append((d, returned, charged))
             if hits:
-                found[d] = dict(hits[0], source="Hunter domain search")
+                # Partnerships people and addresses first; Hunter's own order otherwise.
+                best = min(hits, key=lambda h: _emails.partner_rank(h["email"].split("@")[0], h.get("role", "")))
+                found[d] = dict(best, source="Hunter domain search")
             else:
                 why = ("Hunter error: " + err if err else
                        "Hunter found nothing" if returned == 0 else

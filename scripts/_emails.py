@@ -37,6 +37,19 @@ WEBMAIL = ("gmail.com", "outlook.com", "yahoo.com", "hotmail.com", "icloud.com",
            "protonmail.com", "me.com", "aol.com", "live.com")
 PITCH_LOCALPART = ("partnerships", "partner", "collabs", "collab", "business", "brands", "pr", "press",
                    "media", "hello", "hi", "hey", "contact", "team", "info", "editor", "editorial")
+# The address that handles a partnership pitch, ahead of every other pitch address.
+# A company publishes support@ and press@ next to merchants@; only one of them
+# answers "list our gift card" (2026-10-29, gift-card partner list).
+PARTNER_CUE = re.compile(r"partner|merchant|retail|bizdev|^bd$|alliance|brands?$|collab", re.I)
+
+
+def partner_rank(local, position=""):
+    """0 = a partnerships address or person, 1 = business or marketing, 2 = anything else."""
+    if PARTNER_CUE.search(local) or re.search(r"partner|business development|alliance|merchant", position, re.I):
+        return 0
+    if re.search(r"^(business|sales|marketing|growth)$", local) or re.search(r"marketing|growth|sales", position, re.I):
+        return 1
+    return 2
 TAG_RE = re.compile(r"<script.*?</script>|<style.*?</style>|<[^>]+>", re.S | re.I)
 
 
@@ -77,5 +90,6 @@ def published_emails(domain, pages):
 
     def rank(item):
         email, (url, cue, own) = item
-        return (not own, email.split("@")[0] not in PITCH_LOCALPART, not cue)
+        local = email.split("@")[0]
+        return (not own, partner_rank(local), local not in PITCH_LOCALPART, not cue)
     return [(e, u, c) for e, (u, c, o) in sorted(found.items(), key=rank)]
