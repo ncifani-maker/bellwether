@@ -9,6 +9,14 @@
 ## ICP
 <Who buys it. Demand side only: the people who would buy, not the people who would supply it.>
 
+## Categories and comparable brands  **for seeds**
+- **Categories:** <the 1–4 categories it sells into or sits next to. /snowball proposes nothing outside them.>
+- **Comparable brands:** <3–5 product brands this client's buyers also buy, the kind independent sites review.
+  Not direct service or franchise competitors: in the 2026-10 run those turned up job sites, not reviewers
+  (CHANGELOG D22).>
+- **Known partner sites (optional):** <path to a CSV export of the client's current affiliate or creator
+  partners, with a domain or website column. /snowball starts from these when they exist.>
+
 ## Conversion event  **Required**
 <The event that counts as a conversion, the attribution window, the tracker.>
 

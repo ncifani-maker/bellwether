@@ -31,7 +31,7 @@ anything.
   `data/api-usage.csv` after. A command that stops with exit code 3 is asking Nicole, not failing.
 - **Keys:** one file, `../.env` (the nac-worldwide root, mode 600), read through `scripts/_keys.py`. Never
   printed, never copied into the repo, never passed on a command line.
-- **Predecessors are read-only** (CHANGELOG D2). `../bellwether-1.0/` and
+- **Predecessors are read-only** (CHANGELOG D2). `../_archive/bellwether-1.0/` and
   `~/Desktop/serp-tracker/close-demo/` are reference. Copy from them; never edit or delete in them.
 - **The SERP Tracker is never modified from here.** It is the client-facing view (PRD §9).
 
@@ -44,6 +44,7 @@ scripts/            pipeline scripts + _keys.py, _budget.py, _brief.py
 data/               api-usage.csv (the ledger), contacts.csv (gitignored: PII), opportunities, results
 outputs/<slug>/     per-run outputs by slate
 docs/               method docs carried forward
+talk/               the partner-discovery talk: walkthrough.md (on screen), speaker-notes.md
 vendor/youtube-scout/  pinned upstream; local patches in patches/
 ```
 
@@ -51,6 +52,7 @@ vendor/youtube-scout/  pinned upstream; local patches in patches/
 | Command | Stage |
 | --- | --- |
 | `/create-seeds <slug>` | 1: draft a seed list (category or brand-review) as `proposed`, optional volume/CPC, record approvals and retirements |
+| `/snowball <slug> [--sites <csv>]` | 1: seed brands from what our review sites already review (sitemaps, free), sorted and proposed for approval |
 | `/import-seeds <file> <slug>` | 1: a seed spreadsheet (.xlsx/.csv) into `briefs/<slug>/seeds.csv`. Free. |
 | `/run-seeds <slug>` | 2a + 3: scan approved seeds, keep reviews, tier sites, capture published emails, check AI crawler access |
 | `/fetch-emails <csv> <slug>` | 4: contacts for the team's curated list, handed back in their own CSV |

@@ -5,6 +5,34 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-10-30 — /snowball: seed brands from what our reviewers already review
+
+**D22. Seed brands can come from the reviewers, not from memory.** Nicole asked to automate the
+category / brand seed list. Until now the operator supplied both: the team's sheet had 19 categories and
+159 brands, chosen by hand, and Bellwether only ran them. `scripts/snowball_brands.py` reads each review
+site's sitemap and RSS feed, keeps "[X] review(s)" and "[X] vs [Y]" posts, and counts how many different
+sites cover each name. It's free: public pages only, no paid API.
+
+Measured on the 2026-10 run (179 non-media sites, 136 readable): 3,222 names on 2+ sites, with 30+
+credible DTC brands that weren't on the team's list, each covered by at least two creator blogs (Nolah,
+Casper, Puffy, LMNT, Eight Sleep, HelloFresh, Aera and others).
+
+Why it counts but doesn't judge: the raw list mixes ordinary words, retailers, legacy brands, tech
+giants and closed companies (Freshly), and some brands are ordinary words (Casper, Puffy), so a
+dictionary filter can't decide. Sorting brands from noise is the /snowball command's in-session step, and
+its proposals go in as `proposed`. Nicole approves them, as with every seed.
+
+What a good seed looks like, measured on the same run: product brands with buzz found creator blogs
+(Caraway 8, Pura 6, AirDoctor 4); service and franchise brands found none (The Cleaning Authority, Two
+Maids, Mr. Handyman, Lawn Love: zero review sites, only job sites). A brand that many of our sites already
+cover is proven but mostly re-finds the same sites, so the command prefers creator coverage in thinly
+covered categories.
+
+Limit: it can only grow categories whose reviewers are already in the data. The 10 categories pulled by
+hand in June and July have no reviewer sites in Bellwether yet.
+
+---
+
 ## 2026-10-22 (later) — Outputs live in the repo's outputs folder
 
 **D21. Future outputs go in `bellwether-2.0/outputs/`, not Downloads.** Nicole.

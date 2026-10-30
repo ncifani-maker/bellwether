@@ -2,7 +2,7 @@
 
 **Owner:** Nicole · NAC Worldwide · **Version:** draft · **Date:** Oct 6, 2026
 **Status:** Draft for build. Decisions behind this document are logged in `CHANGELOG.md`.
-**Predecessors:** `../bellwether-1.0/` (creator discovery, YouTube lane, key and spend tooling) and
+**Predecessors:** `../_archive/bellwether-1.0/` (creator discovery, YouTube lane, key and spend tooling) and
 `~/Desktop/serp-tracker/close-demo/` (earned-media pipeline from seeds to Close leads). Both are read-only
 reference. Bellwether copies from them and never edits or deletes anything in either folder.
 
