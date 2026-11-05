@@ -226,6 +226,32 @@ def scan_query(key, query, pages):
 
 # --- inputs -------------------------------------------------------------------
 
+def mark_scanned(path, scanned, slate, replayed=False):
+    """Seeds this run searched successfully go from `approved` to `done`, so the
+    next run doesn't pay for them again (2026-11-04: a dry run re-planned two
+    brands searched that morning). To search one again, approve it again with
+    seed_status.py: approving is the permission to spend. On a demo brief a seed
+    replayed from saved results is marked done the same way (D27). -> how many changed."""
+    lines = path.read_text().splitlines(keepends=True)
+    head = [l for l in lines if l.lstrip().startswith("#")]
+    rows = list(csv.DictReader([l for l in lines if not l.lstrip().startswith("#")]))
+    if not rows:
+        return 0
+    stamp = "{} {} (slate {})".format("replayed from saved results" if replayed else "searched",
+                                      date.today().isoformat(), slate)
+    n = 0
+    for r in rows:
+        if r.get("keyword") in scanned and (r.get("status") or "").strip().lower() == "approved":
+            r["status"] = "done"
+            r["note"] = stamp + ("; " + r["note"] if r.get("note") else "")
+            n += 1
+    with path.open("w", newline="") as fh:
+        fh.writelines(head)
+        w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        w.writeheader(); w.writerows(rows)
+    return n
+
+
 def read_seeds(path):
     """Approved rows only. -> (approved, counts_by_status)"""
     with path.open() as fh:
@@ -284,11 +310,14 @@ def main():
                          "cheaply, or for a demo that has to fit in a minute.")
     ap.add_argument("--dry-run", action="store_true", help="plan and budget only; spend nothing")
     ap.add_argument("--yes", action="store_true", help="approve a run over the confirm threshold")
+    ap.add_argument("--live", action="store_true",
+                    help="on a demo brief, search for real instead of replaying saved results (D27)")
     args = ap.parse_args()
 
     key = require("SERP_API_KEY")
     pages = max(1, args.depth // 10)
-    out_dir = ROOT / "outputs" / args.brand / args.slate
+    import _paths
+    out_dir = _paths.raw_dir(args.brand)   # one folder per brand (CHANGELOG D25)
     seeds_path = Path(args.seeds) if args.seeds else ROOT / "briefs" / args.brand / "seeds.csv"
 
     # 1. Seeds — the gate. Ad-hoc keywords are allowed because Nicole typed them.
@@ -313,13 +342,41 @@ def main():
         source += " (--limit {} of {})".format(args.limit, len(seeds))
         seeds = seeds[:args.limit]
 
+    # 1b. A demo brief replays a seed searched before instead of paying for it
+    # again (D27: a rehearsal reset the seeds, and the next run re-bought 6 of
+    # its 10 searches). A seed with nothing saved is left approved, not searched.
+    demo = _paths.is_demo(args.brand) and not args.live
+    replay = []
+    if demo:
+        saved_path = out_dir / "serp-results.json"
+        try:
+            saved = json.loads(saved_path.read_text()) if saved_path.exists() else {}
+        except ValueError:
+            saved = {}
+        replay = [s for s in seeds if s in saved]
+        missing = [s for s in seeds if s not in saved]
+        print("SERP scan · {} · slate {}".format(args.brand, args.slate))
+        print("  " + _paths.DEMO_LINE)
+        print("  replaying {} of {} seed(s) from saved results: 0 searches".format(len(replay), len(seeds)))
+        if missing:
+            print("  not saved, so not searched (still approved; --live searches them): {}".format(
+                ", ".join(missing)))
+        if args.dry_run:
+            print("\ndry run — nothing spent, nothing changed.")
+            return 0
+        if not replay:
+            return _budget.DEMO
+        seeds = []
+
     # 2. Budget, before anything is spent.
     planned = len(seeds) * pages
-    remaining = searches_left(key)
-    code, lines = _budget.gate("serpapi", planned, remaining, yes=args.yes)
+    remaining = None if demo else searches_left(key)
+    code, lines = (_budget.OK, []) if demo else _budget.gate(
+        "serpapi", planned, remaining, yes=args.yes, brand=args.brand, live=args.live)
 
-    print("SERP scan · {} · slate {}".format(args.brand, args.slate))
-    print("seeds: {} from {} · depth {} ({} pages each)".format(len(seeds), source, args.depth, pages))
+    if not demo:
+        print("SERP scan · {} · slate {}".format(args.brand, args.slate))
+        print("seeds: {} from {} · depth {} ({} pages each)".format(len(seeds), source, args.depth, pages))
     for line in lines:
         print("  " + line)
 
@@ -389,7 +446,13 @@ def main():
                             len(latest), len(seeds), pages,
                             "; {} failed".format(len(failed)) if failed else "",
                             "; stopped at reserve" if stopped_at else ""))
-        raw_path.write_text(json.dumps(raw, indent=2))
+        if not demo:
+            raw_path.write_text(json.dumps(raw, indent=2))
+        done_now = set(replay) if demo else set(latest)
+        if done_now and not args.keywords:
+            n = mark_scanned(seeds_path, done_now, args.slate, replayed=demo)
+            if n:
+                sys.stderr.write("  {} seed(s) marked done in {}\n".format(n, seeds_path.relative_to(ROOT)))
 
     # 4. Aggregate per domain — the unit of decision is a partner, not a link.
     # Aggregate over EVERY seed known for this brand and slate, not just the ones
@@ -443,8 +506,8 @@ def main():
             writer.writerows(dropped)
 
     # 5. Report.
-    print("\n{} domains from {} seeds on file ({} run now) · {} searches spent".format(
-        len(ranked), len(raw), len(latest), spent))
+    print("\n{} domains from {} seeds on file ({} {} now) · {} searches spent".format(
+        len(ranked), len(raw), len(replay) if demo else len(latest), "replayed" if demo else "run", spent))
     if failed:
         print("failed seeds ({}): {}".format(len(failed), ", ".join(failed)))
     if stopped_at:
@@ -460,7 +523,7 @@ def main():
         print("{:<34} {:>6} {:>5}  {}".format(
             rec["domain"][:34], rec["seeds_covered"],
             rec["best_rank"] if rec["best_rank"] < 999 else "-", status))
-    left = searches_left(key)
+    left = None if demo else searches_left(key)
     print("\nwrote {}".format((out_dir / "serp-domains.csv").relative_to(ROOT)))
     if left is not None:
         print("SerpAPI: {:,} searches left this month".format(left))

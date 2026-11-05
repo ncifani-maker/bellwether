@@ -188,7 +188,7 @@ def check_close(key):
     if status == 200 and isinstance(body, dict):
         org = (body.get("organizations") or [{}])[0].get("name", "")
         return True, "valid{}".format(" · " + org if org else "")
-    return False, "HTTP {} — key rejected. Close is the CRM here (CHANGELOG D3); fresh key pending, Phase 3 waits on it.".format(status)
+    return False, "not connected yet: leads go into Close in Phase 3 (CHANGELOG D3). Key on file rejected, HTTP {}.".format(status)
 
 
 CHECKS = [
@@ -223,7 +223,8 @@ def main():
                 failures.append(label)
             continue
         ok, detail = checker(*values)
-        rows.append((label, "ok" if ok else "FAIL", detail, source_of(names[0])))
+        # A service Bellwether doesn't use yet reads "later", not a red FAIL.
+        rows.append((label, "ok" if ok else ("FAIL" if required else "later"), detail, source_of(names[0])))
         if not ok and required:
             failures.append(label)
 
@@ -233,7 +234,7 @@ def main():
             indent=2,
         ))
     else:
-        print("keys file: {}\n".format(CANONICAL))
+        print("keys file: {}\n".format(str(CANONICAL).replace(str(Path.home()), "~")))
         width = max(len(r[0]) for r in rows) if rows else 10
         for label, status, detail, src in rows:
             print("{:<{w}}  {:<7}  {}".format(label, status, detail, w=width))

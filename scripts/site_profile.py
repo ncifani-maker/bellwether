@@ -28,8 +28,9 @@ Patterns for bylines, dates and analytics IDs come from close-demo's
 qualify_targets.py, which needs `requests`; this one is standard library only.
 
 Reads   the kept sites from review_sites.collect(<slug>, <slate>)
-Writes  outputs/<slug>/<slate>/site-profiles.csv   (no personal data)
-        outputs/<slug>/<slate>/creator-shortlist.xlsx (gitignored)
+Writes  briefs/<slug>/review-sites.csv     the one results file: added to and updated, never
+                                          wiped (gitignored: it carries published addresses)
+        briefs/<slug>/raw/site-profiles.csv this run's rows, no personal data (committed)
 
 Usage:
   python3 scripts/site_profile.py affiliate-seo-creators --slate 2026-10
@@ -49,6 +50,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _emails  # noqa: E402
+import _paths
 import review_sites  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -311,120 +313,178 @@ def main():
     ap.add_argument("slug")
     ap.add_argument("--slate", default=date.today().strftime("%Y-%m"))
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--suggest-only", action="store_true",
+                    help="just refresh the `suggested` column in review-sites.csv; read no sites")
+    ap.add_argument("--live", action="store_true",
+                    help="on a demo brief, visit the sites instead of reusing saved profiles (D27)")
     args = ap.parse_args()
 
+    if args.suggest_only:
+        path = _paths.review_sites(args.slug)
+        write_review_sites(path, [], [])
+        from collections import Counter
+        with path.open() as fh:
+            got = Counter((r["suggested"] or "").split(":")[0]
+                          for r in csv.DictReader(l for l in fh if not l.startswith("#")))
+        print("refreshed `suggested` in {}: {}".format(path.relative_to(ROOT), dict(got)))
+        return 0
+
     raw_path, _, ranked, _, _ = review_sites.collect(args.slug, args.slate)
-    jobs = [(d, s["example"]["title"], s["example"]["url"]) for d, s in ranked]
-    sys.stderr.write("profiling {} sites, {} at a time (no API calls)\n".format(len(jobs), args.workers))
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        profiles = {p["domain"]: p for p in pool.map(profile, jobs)}
+    demo = _paths.is_demo(args.slug) and not args.live
+    if demo:
+        # Visiting 30 sites takes minutes; a talk can't wait (D27). Reuse each
+        # site's saved profile; a site never profiled is listed and left out.
+        saved_path = raw_path.parent / "site-profiles.csv"
+        profiles = {}
+        if saved_path.exists():
+            with saved_path.open() as fh:
+                profiles = {r["domain"]: r for r in csv.DictReader(l for l in fh if not l.startswith("#"))}
+        missing = [d for d, _ in ranked if d not in profiles]
+        ranked = [(d, s) for d, s in ranked if d in profiles]
+        print(_paths.DEMO_LINE)
+        print("reusing the saved profiles of {} site(s); visiting none".format(len(ranked)))
+        if missing:
+            print("not profiled yet, so left out (--live visits them): {}".format(", ".join(missing)))
+    else:
+        jobs = [(d, s["example"]["title"], s["example"]["url"]) for d, s in ranked]
+        sys.stderr.write("profiling {} sites, {} at a time (no API calls)\n".format(len(jobs), args.workers))
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:
+            profiles = {p["domain"]: p for p in pool.map(profile, jobs)}
 
     rows = []
     for d, s in ranked:
         p = profiles[d]
         rows.append(dict(p, brands_reviewed=len(s["brands"]), categories=", ".join(s["categories"]),
-                         brands=", ".join(s["brands"]), example_title=s["example"]["title"],
-                         example_url=s["example"]["url"]))
+                         brands=", ".join(s["brands"]), best_rank=s["best"], result_types=", ".join(s["types"]),
+                         example_title=s["example"]["title"], example_url=s["example"]["url"]))
 
-    fields = ["domain", "tier", "evidence", "brands_reviewed", "categories", "brands",
+    fields = ["domain", "tier", "evidence", "brands_reviewed", "categories", "brands", "best_rank", "result_types",
               "ai_search", "ai_training", "cdn", "authors_on_home",
               "latest_year", "affiliate_disclosure", "about_page", "contact_page", "published_email",
               "http", "example_title", "example_url"]
     csv_path = raw_path.parent / "site-profiles.csv"
-    with csv_path.open("w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=fields); w.writeheader()
-        for r in rows:
-            w.writerow({k: r.get(k, "") for k in fields})
-    # The workbook is local (gitignored; the commit hook refuses spreadsheets),
-    # so it alone carries the address, right after the yes/blank flag.
-    xlsx_fields = fields[:fields.index("published_email") + 1] + ["published_email_address"] + \
-        fields[fields.index("published_email") + 1:]
-    xlsx = write_shortlist(raw_path.parent / "creator-shortlist.xlsx", rows, xlsx_fields, args)
+    if not demo:                       # a replay learned nothing new: the saved file stays as it is
+        with csv_path.open("w", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=fields); w.writeheader()
+            for r in rows:
+                w.writerow({k: r.get(k, "") for k in fields})
+    # The one results file, beside the brief and the seed list (CHANGELOG D25). It's
+    # local (gitignored; the commit hook refuses addresses), so it alone carries the
+    # published address, in the `email` column the team's sheet already has.
+    results = write_review_sites(_paths.review_sites(args.slug), rows, fields)
 
     from collections import Counter
     c = Counter(r["tier"] for r in rows)
-    print("profiled {} sites".format(len(rows)))
+    print("{} {} sites".format("replayed" if demo else "profiled", len(rows)))
     for tier in ("creator blog", "niche review site", "media / publisher", "check"):
         print("  {:<20} {}".format(tier, c.get(tier, 0)))
     team = [r for r in rows if r["tier"] in ("creator blog", "niche review site")]
     print("for the team: {} sites · {} publish an email · {} have a contact page".format(
         len(team), sum(1 for r in team if r["published_email"]),
         sum(1 for r in team if r["contact_page"])))
-    print("wrote {}".format(csv_path.relative_to(ROOT)))
-    print("wrote {}".format(xlsx.relative_to(ROOT)))
+    if not demo:
+        print("wrote {}".format(csv_path.relative_to(ROOT)))
+    print("updated {} ({} sites)".format(results.relative_to(ROOT), count_rows(results)))
     return 0
 
 
-HEADERS = {"published_email_address": "published email (unverified)"}
+# review-sites.csv is site-profiles.csv, column for column, plus the two columns
+# the team's sheet ends with (Nicole, 2026-11-04). /fetch-emails fills those two in
+# place, so one layout runs from research to outreach.
+EMAIL_COLUMNS = ["email", "email status"]
+PUBLISHED = "published on site, not yet verified"
+ORDER = ["creator blog", "niche review site", "check", "media / publisher"]   # the team's tiers first
+# A brief whose sites were categorized by hand has "site type" instead of "tier".
+SITE_TYPE = {"creator blog": "Creator blog", "niche review site": "Niche review site",
+             "media / publisher": "Media", "check": "Check by hand"}
 
 
-def write_shortlist(out, rows, fields, args):
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
-    from openpyxl.utils import get_column_letter
-    head = Font(name="Arial", bold=True, color="1F3864", size=10)
-    body = Font(name="Arial", size=10)
-    link = Font(name="Arial", size=10, color="1155CC", underline="single")
-    fill = PatternFill("solid", fgColor="D9E2F3")
-    widths = {"domain": 28, "tier": 16, "evidence": 44, "brands_reviewed": 9, "categories": 30, "brands": 36,
-              "authors_on_home": 8, "latest_year": 8, "affiliate_disclosure": 9, "about_page": 32,
-              "contact_page": 32, "published_email": 9, "http": 6, "example_title": 50, "example_url": 44}
+CURATION = ["suggested", "shortlist"]       # right after `domain`, so they're visible scrolled left
 
-    wb = Workbook(); wb.remove(wb.active)
 
-    def sheet(title, subset):
-        ws = wb.create_sheet(title)
-        ws.append([HEADERS.get(f, f) for f in fields])
-        for c in ws[1]:
-            c.font, c.fill, c.alignment = head, fill, Alignment(wrap_text=True, vertical="center")
-        for r in subset:
-            ws.append([r.get(k, "") for k in fields])
-        for row in ws.iter_rows(min_row=2):
-            for c in row:
-                c.font = body
-                if isinstance(c.value, str) and c.value.startswith("http"):
-                    c.hyperlink, c.font = c.value, link
-        for i, f in enumerate(fields, 1):
-            ws.column_dimensions[get_column_letter(i)].width = widths.get(f, 14)
-        ws.freeze_panes = "B2"
-        ws.auto_filter.ref = ws.dimensions
+def suggest(r):
+    """The tool's pre-sort for the shortlist: "yes", "check: why" or "no: why".
+    A suggestion, never a decision: `shortlist` is the person's column (D26)."""
+    kind = (r.get("site type") or r.get("tier") or "").strip().lower()
+    if kind in ("media", "media / publisher"):
+        return "no: media, set aside"
+    if kind == "wrong match":
+        return "no: not a review site"
+    if kind == "competitor brand":
+        return "no: a competitor"
+    if kind in ("check", "check by hand", ""):
+        return "check: couldn't tell what kind of site it is"
+    year = str(r.get("latest_year") or "").strip()   # an int on freshly profiled rows
+    if year.isdigit() and int(year) < date.today().year - 1:
+        return "check: newest date seen is {} (homepages can show old dates)".format(year)
+    if not (r.get("contact_page") or r.get("published_email") or r.get("email")):
+        if (r.get("http") or "") not in ("", "200"):
+            return "yes: it blocked our reader, so no contact found yet"
+        return "check: no contact page or published email"
+    return "yes"
 
-    sheet("For the team", [r for r in rows if r["tier"] in ("creator blog", "niche review site")])
-    sheet("Check by hand", [r for r in rows if r["tier"] == "check"])
-    sheet("Media - set aside", [r for r in rows if r["tier"] == "media / publisher"])
-    ws = wb.create_sheet("Method")
-    for line in [
-        ("Rule", "Creator-style blogs and small niche review sites go to the team. Media and publishers are "
-                 "set aside, not deleted (CHANGELOG D13)."),
-        ("How", "Each site's homepage, about page and contact page are fetched and read. No API calls."),
-        ("Creator", "An about page introducing one person, or a first-person homepage with 1-2 bylines."),
-        ("Niche review", "Testing language, a small team, or a review-business domain."),
-        ("Media", "A known media domain, or a parent publisher named on the site with several bylines."),
-        ("Check by hand", "Blocked, unreachable, or no clear signal. Never guessed: a 403 is not an absence."),
-        ("published_email", "Yes when the site publishes an email on its own pages."),
-        ("published email (unverified)", "That address, captured at research time (CHANGELOG D18). Not yet "
-                                         "verified: that happens at the contact step, always. Only this "
-                                         "local workbook carries it; the committed site-profiles.csv has "
-                                         "yes/blank."),
-        ("ai_search", "Can ChatGPT's and Claude's SEARCH crawlers (OAI-SearchBot, Claude-SearchBot) read the "
-                      "page that ranked, per its robots.txt? yes / no / fetch-only (only the user-requested "
-                      "fetcher is allowed). This is what decides whether the page can be cited in an answer now."),
-        ("ai_training", "Whether robots.txt blocks the TRAINING crawlers (GPTBot, ClaudeBot). Affects what future "
-                        "models learn, not today's citations."),
-        ("cdn", "cloudflare = the site sits behind Cloudflare, which can block AI bots at the network edge "
-                "whatever robots.txt says. A caution, not a verdict. robots.txt is stated policy, not proof, "
-                "and allowed is not the same as cited."),
-        ("Sorted by", "Brands reviewed, most first: a site that reviewed four brands in a category is the "
-                      "person to pitch the fifth."),
-        ("Built", date.today().isoformat()),
-    ]:
-        ws.append(line)
-    for r in ws.iter_rows():
-        r[0].font, r[1].font = head, body
-        r[1].alignment = Alignment(wrap_text=True, vertical="top")
-    ws.column_dimensions["A"].width, ws.column_dimensions["B"].width = 16, 100
-    wb.save(out)
-    return out
+
+def count_rows(path):
+    with path.open() as fh:
+        return sum(1 for _ in csv.DictReader(l for l in fh if not l.startswith("#")))
+
+
+def write_review_sites(path, rows, fields):
+    """The brief's one results file, kept up to date rather than rewritten.
+
+    New sites are added, the team's tiers first. A site already in the file gets
+    this run's research columns, but a column a person added (site type, niche,
+    notes) is never touched, and neither is an email that /fetch-emails or a
+    person put there: only a blank or still-unverified published address is
+    refreshed. An editor's "# ..." settings line stays on top. `suggested` is
+    recomputed for every row; `shortlist`, the person's column, is never touched.
+    """
+    head, header, existing = [], None, {}
+    if path.exists():
+        lines = path.read_text().splitlines(keepends=True)
+        head = [l for l in lines if l.startswith("#")]
+        reader = csv.DictReader(l for l in lines if not l.startswith("#"))
+        header = list(reader.fieldnames or [])
+        existing = {r["domain"]: r for r in reader}
+    if header is None:
+        header = fields + EMAIL_COLUMNS
+    hand_typed = "site type" in header and "tier" not in header
+    for f in fields:                       # research columns the file doesn't have yet
+        if f in header or (f == "tier" and hand_typed):
+            continue
+        header.insert(header.index("email") if "email" in header else len(header), f)
+    for f in EMAIL_COLUMNS:
+        if f not in header:
+            header.append(f)
+    for i, f in enumerate(CURATION):
+        if f not in header:
+            header.insert(header.index("domain") + 1 + i, f)
+
+    new = []
+    for r in rows:
+        cur = existing.get(r["domain"])
+        if cur is None:
+            cur = {"domain": r["domain"]}
+            if hand_typed:
+                cur["site type"] = SITE_TYPE.get(r.get("tier"), "Check by hand")
+            new.append(cur)
+        for f in fields:
+            if f in header:
+                cur[f] = r.get(f, "")
+        published = r.get("published_email_address") or ""
+        if published and (cur.get("email status") or "") in ("", PUBLISHED):
+            cur["email"], cur["email status"] = published, PUBLISHED
+
+    for r in list(existing.values()) + new:
+        r["suggested"] = suggest(r)          # the tool's column: always current
+        r.setdefault("shortlist", "")        # the person's column: never touched
+    with path.open("w", newline="") as fh:
+        fh.writelines(head)
+        w = csv.DictWriter(fh, fieldnames=header, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(existing.values())
+        w.writerows(sorted(new, key=lambda r: ORDER.index(r.get("tier")) if r.get("tier") in ORDER else len(ORDER)))
+    return path
 
 
 if __name__ == "__main__":

@@ -116,6 +116,7 @@ def main():
     ap.add_argument("--refresh", action="store_true", help="re-run scout even if workbooks are cached")
     ap.add_argument("--dry-run", action="store_true", help="plan and quota only; spend nothing")
     ap.add_argument("--yes", action="store_true", help="approve a run over the confirm threshold")
+    ap.add_argument("--live", action="store_true", help="on a demo brief, allow the spend (D27)")
     args = ap.parse_args()
 
     require("YOUTUBE_API_KEY")  # fail early with a fix hint, not mid-run
@@ -158,7 +159,8 @@ def main():
 
     # 2. Quota, before anything is spent.
     planned = estimate_units(topics, study.get("scout", {}).get("max", args.max), use_donors)
-    code, lines = _budget.gate("youtube", planned, remaining=None, yes=args.yes, unit="units")
+    code, lines = _budget.gate("youtube", planned, remaining=None, yes=args.yes, unit="units",
+                               brand=args.brand, live=args.live)
 
     print("YouTube scan · {} · slate {}".format(args.brand, args.slate))
     print("topics: {}".format(len(topics)))

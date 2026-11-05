@@ -199,7 +199,7 @@ def read_contacts():
     if not CONTACTS.exists():
         return []
     with CONTACTS.open() as fh:
-        return list(csv.DictReader(fh))
+        return list(csv.DictReader(l for l in fh if not l.startswith("#")))
 
 
 def write_rows(rows):
@@ -215,7 +215,7 @@ def write_rows(rows):
             writer.writerow({k: row.get(k, "") for k in FIELDS})
 
 
-def verify_only(brand, key, yes):
+def verify_only(brand, key, yes, live=False):
     """Verify addresses already found. No YouTube calls, no Hunter searches.
 
     The natural second half of a --no-hunter run: find for free, look at what
@@ -226,7 +226,8 @@ def verify_only(brand, key, yes):
     if not rows:
         print("nothing to verify: every address in data/contacts.csv has a status.")
         return 0
-    code, lines = _budget.gate("hunter", len(rows), remaining=None, yes=yes, unit="verifications")
+    code, lines = _budget.gate("hunter", len(rows), remaining=None, yes=yes, unit="verifications",
+                               brand=brand, live=live)
     print("Verify · {} addresses already found".format(len(rows)))
     for line in lines:
         print("  " + line)
@@ -311,24 +312,62 @@ def hunter_used(key):
 def run_sites(args):
     import csv as _csv
     src = Path(args.from_sites)
-    rows = list(_csv.DictReader(src.open(encoding="utf-8-sig")))
+    # Editors such as Nimbalyst keep their view settings on a "# ..." first line.
+    rows = list(_csv.DictReader(l for l in src.open(encoding="utf-8-sig") if not l.startswith("#")))
     all_domains = [r["domain"].strip() for r in rows]
+    # A brief's review-sites.csv carries the person's `shortlist` column (D26):
+    # only the sites marked yes get looked up.
+    if rows and "shortlist" in rows[0]:
+        marked = [r for r in rows if (r.get("shortlist") or "").strip().lower() in ("yes", "y", "x", "1", "true")]
+        if not marked:
+            sys.exit("no sites marked yes in the `shortlist` column of {}: mark the ones to contact first."
+                     .format(src.name))
+        print("  {} of {} sites marked yes in `shortlist`".format(len(marked), len(rows)))
+        rows = marked
     # Skip sites this brief has already resolved, whatever the outcome (an
     # address, or a search that found nothing). Re-running the same list after
     # a Hunter reset would otherwise re-verify and re-search every one of them:
     # caught 2026-10-22 before it spent ~60 credits. --refresh redoes them.
     if not args.refresh and CONTACTS.exists():
         with CONTACTS.open() as fh:
-            resolved = {r["handle"] for r in _csv.DictReader(fh) if r.get("brand") == args.brand}
+            resolved = {r["handle"] for r in _csv.DictReader(l for l in fh if not l.startswith("#"))
+                        if r.get("brand") == args.brand}
         before = len(rows)
         rows = [r for r in rows if r["domain"].strip() not in resolved]
         if before != len(rows):
             print("  skipping {} site(s) already resolved for {} (--refresh to redo)".format(
                 before - len(rows), args.brand))
+    # A site's contact is the site's, whatever list found it: reuse a usable one
+    # another brief already verified rather than paying Hunter twice (D26).
+    # A dry run counts them too (writing nothing), so it doesn't price them.
+    if rows and CONTACTS.exists():
+        others = {}
+        for c in read_contacts():
+            if c.get("brand") != args.brand and c.get("usable") in ("yes", "decide"):
+                others.setdefault(c["handle"], c)
+        reuse = [others[r["domain"].strip()] for r in rows if r["domain"].strip() in others]
+        if reuse:
+            if not args.dry_run:
+                write_rows([dict(c, brand=args.brand, found_at=date.today().isoformat(),
+                                 notes="reused from {}'s lookup of {}; {}".format(c["brand"], c["found_at"], c.get("notes", "")))
+                            for c in reuse])
+            done = {c["handle"] for c in reuse}
+            rows = [r for r in rows if r["domain"].strip() not in done]
+            print("  {} site(s) {}reused from another brief's verified contacts (no Hunter spend)".format(
+                len(reuse), "would be " if args.dry_run else ""))
     if args.top:
         rows = rows[:args.top]
     if not rows:
         print("nothing left to look up for {}".format(args.brand))
+        return 0
+    # A demo brief stops here: what's saved is filled in, and the rest would mean
+    # reading pages and paying Hunter, which a talk can't wait for (D27).
+    import _paths
+    if _paths.is_demo(args.brand) and not args.live:
+        print("  " + _paths.DEMO_LINE)
+        print("  no saved contact for {} site(s), so not looked up: {}".format(
+            len(rows), ", ".join(r["domain"].strip() for r in rows)))
+        print("  before the talk, run with --live to look them up")
         return 0
     key = require("HUNTER_API_KEY")
     slug = args.brand
@@ -344,9 +383,11 @@ def run_sites(args):
     need_hunter = [r for r in rows if not published[r["domain"]]]
 
     # 2. Budget, now that the real numbers are known.
-    s_code, s_lines = _budget.gate("hunter", len(need_hunter), yes=args.yes, unit="searches")
+    s_code, s_lines = _budget.gate("hunter", len(need_hunter), yes=args.yes, unit="searches",
+                                   brand=slug, live=args.live)
     planned_verifs = (len(rows) - len(need_hunter)) + len(need_hunter)
-    v_code, v_lines = _budget.gate("hunter", planned_verifs, yes=True, unit="verifications")
+    v_code, v_lines = _budget.gate("hunter", planned_verifs, yes=True, unit="verifications",
+                                   brand=slug, live=args.live)
     print("Contacts · {} · {} sites".format(slug, len(rows)))
     print("  {} publish an address on their own pages (free) · {} need a Hunter search".format(
         len(rows) - len(need_hunter), len(need_hunter)))
@@ -389,7 +430,8 @@ def run_sites(args):
             if searched >= allowed:
                 found[d] = None
                 continue
-            single = r.get("tier") == "creator blog" and str(r.get("authors_on_home") or "9") in ("0", "1")
+            tier = (r.get("tier") or r.get("site type") or "").strip().lower()
+            single = tier == "creator blog" and str(r.get("authors_on_home") or "9") in ("0", "1")
             before = hunter_used(key)
             hits, err = hunter_domain_search(d, key, single_operator=single)
             after = hunter_used(key)
@@ -444,7 +486,8 @@ def run_sites(args):
         if verifs:
             _budget.log("hunter", verifs, "verifications", "find-contacts", slug, "", "site mode")
         write_rows(out)
-        out_dir = ROOT / "outputs" / slug / (args.slate or today[:7])
+        import _paths
+        out_dir = _paths.raw_dir(slug)
         out_dir.mkdir(parents=True, exist_ok=True)
         if measured:
             # Kept on disk, not just printed: the 2026-10-22 measurement was lost
@@ -461,7 +504,8 @@ def run_sites(args):
     # The summary covers the WHOLE list, from data/contacts.csv, not just this
     # run's sites (a re-run used to overwrite it with the latest batch only).
     with CONTACTS.open() as fh:
-        known = {r["handle"]: r for r in _csv.DictReader(fh) if r.get("brand") == slug}
+        known = {r["handle"]: r for r in _csv.DictReader(l for l in fh if not l.startswith("#"))
+                 if r.get("brand") == slug}
     summary = []
     for d in all_domains:
         k = known.get(d)
@@ -515,10 +559,12 @@ def main():
                     help="site mode: redo sites already resolved in data/contacts.csv")
     ap.add_argument("--dry-run", action="store_true", help="plan and budget only")
     ap.add_argument("--yes", action="store_true", help="approve a run over the confirm threshold")
+    ap.add_argument("--live", action="store_true",
+                    help="on a demo brief, look contacts up for real instead of only filling saved ones (D27)")
     args = ap.parse_args()
 
     if args.verify_only:
-        return verify_only(args.brand, require("HUNTER_API_KEY"), args.yes)
+        return verify_only(args.brand, require("HUNTER_API_KEY"), args.yes, args.live)
     if args.from_sites:
         return run_sites(args)
 
@@ -559,7 +605,7 @@ def main():
           "{} publish neither".format(len(targets) - len(needs_search) - len(no_route),
                                       len(needs_search), len(no_route)))
     code, lines = _budget.gate("hunter", planned_searches, remaining=None,
-                               yes=args.yes, unit="searches")
+                               yes=args.yes, unit="searches", brand=args.brand, live=args.live)
     for line in lines:
         print("  " + line)
     if not args.no_hunter:

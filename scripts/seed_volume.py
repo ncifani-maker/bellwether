@@ -74,6 +74,8 @@ def main():
                     help="which seeds: proposed (default), approved, or all")
     ap.add_argument("--dry-run", action="store_true", help="balance and plan only; spend nothing")
     ap.add_argument("--yes", action="store_true", help="approve a run over the confirm threshold")
+    ap.add_argument("--live", action="store_true",
+                    help="on a demo brief, call DataForSEO instead of showing saved volumes (D27)")
     args = ap.parse_args()
 
     seeds_path = ROOT / "briefs" / args.slug / "seeds.csv"
@@ -83,6 +85,34 @@ def main():
     if not pick:
         sys.exit("no `{}` seeds in {}".format(args.status, seeds_path.relative_to(ROOT)))
     pick = pick[:1000]
+
+    # A demo brief shows the volumes saved from an earlier check and spends nothing (D27).
+    import _paths
+    if _paths.is_demo(args.slug) and not args.live:
+        saved_path = seeds_path.parent / "seed-volume.csv"
+        saved = {}
+        if saved_path.exists():
+            with saved_path.open() as fh:
+                saved = {r["keyword"].lower(): r for r in csv.DictReader(l for l in fh if not l.startswith("#"))}
+        have = [kw for kw in pick if kw.lower() in saved]
+        missing = [kw for kw in pick if kw.lower() not in saved]
+        print("Seed volume · {} · {} `{}` seeds".format(args.slug, len(pick), args.status))
+        print("  " + _paths.DEMO_LINE)
+        if have:
+            print("\n{:>8} {:>7}  {}".format("volume", "cpc", "seed"))
+            def cpc(kw):
+                try:
+                    return float(saved[kw.lower()]["cpc"])
+                except (TypeError, ValueError):
+                    return 0.0
+            for kw in sorted(have, key=lambda k: -cpc(k)):
+                r = saved[kw.lower()]
+                print("{:>8} {:>7}  {}  (checked {})".format(r.get("volume") or "n/a",
+                                                             "${:.2f}".format(cpc(kw)) if r.get("cpc") else "n/a",
+                                                             kw, r.get("checked") or "?"))
+        if missing:
+            print("\nno saved volume for {} seed(s) (--live checks them): {}".format(len(missing), ", ".join(missing)))
+        return 0 if have else _budget.DEMO
 
     login, password = require("DATAFORSEO_LOGIN", "DATAFORSEO_PASSWORD")
     auth = base64.b64encode("{}:{}".format(login, password).encode()).decode()

@@ -17,12 +17,14 @@ the ones in the source sheet's Instructions tab:
   skip     forums and community threads, unless UGC is tracked deliberately
   skip     retailers: a product page with reviews is a shop, not a reviewer
 
-Every skip lands in the Excluded sheet with its reason. Nothing is dropped
+Every skip lands in raw/review-excluded.csv with its reason. Nothing is dropped
 silently, because the screen is a heuristic and will be wrong sometimes.
 
-Reads  briefs/<slug>/seeds.csv            (keyword -> category, brand, form)
-       outputs/<slug>/<slate>/serp-results.json
-Writes outputs/<slug>/<slate>/review-sites.xlsx
+Reads  briefs/<slug>/seeds.csv                 (keyword -> category, brand, form)
+       briefs/<slug>/raw/serp-results.json
+Writes briefs/<slug>/raw/review-results.csv      every result kept
+       briefs/<slug>/raw/review-excluded.csv     every result skipped, with the reason
+The sites themselves, one row each, go in briefs/<slug>/review-sites.csv (site_profile.py).
 
 Usage:
   python3 scripts/review_sites.py affiliate-seo-creators --slate 2026-10
@@ -63,9 +65,20 @@ EMPLOYER_REVIEWS = {"indeed.com", "glassdoor.com", "comparably.com", "ziprecruit
 DIRECTORIES = {"homeadvisor.com", "angi.com", "angieslist.com", "thumbtack.com", "birdeye.com",
                "porch.com", "nextdoor.com", "houzz.com", "taskrabbit.com", "yellowpages.com",
                "mapquest.com", "chamberofcommerce.com", "manta.com", "bark.com"}
+# A forum on its own domain (smokingmeatforums.com, weberkettleclub.com) shows
+# itself in the name or in the thread URL (Braise, 2026-11-04).
+FORUM_URL = ("/threads/", "/forums/", "/forum/", "/topic/", "/viewtopic", "showthread")
+
+
+def is_forum_page(domain, row):
+    url = (row.get("url") or "").lower()
+    return "forum" in root_domain(domain) or any(m in url for m in FORUM_URL)
+
+
 # The SERP Tracker's noise list, matched on the ROOT domain so country
 # subdomains (ie.trustpilot.com, nz.trustpilot.com) are caught here too.
-NOISE_ROOTS = {"trustpilot.com", "yelp.com", "bbb.org", "reddit.com"}
+NOISE_ROOTS = {"trustpilot.com", "yelp.com", "bbb.org", "reddit.com",
+               "google.com"}   # a Google-hosted copy of someone else's review (Braise, 2026-11-04)
 
 # An app listing has reviews, but it is a store page, not a reviewer.
 APP_STORES = {"play.google.com", "apps.apple.com", "itunes.apple.com", "chrome.google.com"}
@@ -111,7 +124,7 @@ def classify(row: dict, brand: str):
         return False, "brand's own site"
     if root_domain(domain) in EMPLOYER_REVIEWS:
         return False, "employer reviews (job site)"
-    if domain.startswith(FORUM_HOSTS) or root_domain(domain) in FORUM_DOMAINS:
+    if domain.startswith(FORUM_HOSTS) or root_domain(domain) in FORUM_DOMAINS or is_forum_page(domain, row):
         return False, "forum / community"
     if root_domain(domain) in NOISE_ROOTS:
         return False, "on the tracker's noise list"
@@ -135,15 +148,15 @@ def load_seeds(slug: str) -> dict:
 
 def build(slug: str, slate: str) -> Path:
     raw_path, raw, ranked, results, excluded = collect(slug, slate)
-    out = raw_path.parent / "review-sites.xlsx"
-    write_workbook(out, slug, slate, raw, ranked, results, excluded)
-    return out
+    write_csvs(raw_path.parent, results, excluded)
+    return raw_path.parent
 
 
 def collect(slug: str, slate: str):
     """The kept sites, ranked. One definition, shared with site_profile.py."""
     seeds = load_seeds(slug)
-    raw_path = ROOT / "outputs" / slug / slate / "serp-results.json"
+    import _paths
+    raw_path = _paths.raw_dir(slug) / "serp-results.json"
     raw = json.loads(raw_path.read_text())
 
     results, excluded = [], []
@@ -174,95 +187,22 @@ def collect(slug: str, slate: str):
     return raw_path, raw, ranked, results, excluded
 
 
-def write_workbook(out, slug, slate, raw, ranked, results, excluded):
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
-    from openpyxl.utils import get_column_letter
+def write_csvs(out_dir, results, excluded):
+    """The detail behind the one results file: every result kept and every result
+    thrown out, with the reason (D24, D25). The sites themselves go in the brief's
+    review-sites.csv, written by site_profile.py."""
+    def write(name, headers, rows):
+        with (out_dir / name).open("w", newline="") as fh:
+            w = csv.writer(fh); w.writerow(headers); w.writerows(rows)
 
-    navy, band = "1F3864", "D9E2F3"
-    head_font = Font(name="Arial", bold=True, color=navy, size=10)
-    body_font = Font(name="Arial", size=10)
-    link_font = Font(name="Arial", size=10, color="1155CC", underline="single")
-    fill = PatternFill("solid", fgColor=band)
-
-    def sheet(wb, title, headers, rows, widths, link_cols=()):
-        ws = wb.create_sheet(title)
-        ws.append(headers)
-        for c in ws[1]:
-            c.font, c.fill = head_font, fill
-            c.alignment = Alignment(vertical="center", wrap_text=True)
-        for row in rows:
-            ws.append(row)
-        for r in ws.iter_rows(min_row=2):
-            for c in r:
-                c.font = body_font
-                c.alignment = Alignment(vertical="top", wrap_text=False)
-            for i in link_cols:
-                cell = r[i]
-                if cell.value and str(cell.value).startswith("http"):
-                    cell.hyperlink, cell.font = cell.value, link_font
-        for i, w in enumerate(widths, 1):
-            ws.column_dimensions[get_column_letter(i)].width = w
-        ws.freeze_panes = "A2"
-        ws.auto_filter.ref = ws.dimensions
-        return ws
-
-    wb = Workbook()
-    wb.remove(wb.active)
-    sheet(wb, "Sites",
-          ["Domain", "Brands reviewed", "Categories", "Brands", "Best rank", "Result types",
-           "Example title", "Example URL"],
-          [[d, len(s["brands"]), ", ".join(s["categories"]), ", ".join(s["brands"]), s["best"],
-            ", ".join(s["types"]), s["example"]["title"], s["example"]["url"]] for d, s in ranked],
-          [30, 10, 30, 44, 9, 22, 60, 60], link_cols=(7,))
-    sheet(wb, "Results",
-          ["Category", "Brand", "Query", "Rank", "Domain", "Type", "Title", "URL"],
+    write("review-results.csv",
+          ["category", "brand", "query", "rank", "domain", "type", "title", "url"],
           [[r["category"], r["brand"], r["query"], r["rank"], r["domain"], r["label"], r["title"], r["url"]]
-           for r in sorted(results, key=lambda r: (r["category"], r["brand"], r["rank"] or 99))],
-          [24, 22, 30, 6, 30, 16, 60, 60], link_cols=(7,))
-    sheet(wb, "Excluded",
-          ["Domain", "Reason", "Brand", "Query", "Rank", "Title", "URL"],
+           for r in sorted(results, key=lambda r: (r["category"], r["brand"], r["rank"] or 99))])
+    write("review-excluded.csv",
+          ["domain", "reason", "brand", "query", "rank", "title", "url"],
           [[r["domain"], r["label"], r["brand"], r["query"], r["rank"], r["title"], r["url"]]
-           for r in sorted(excluded, key=lambda r: (r["label"], r["domain"]))],
-          [30, 20, 22, 30, 6, 60, 60], link_cols=(6,))
-
-    reasons = defaultdict(int)
-    for r in excluded:
-        reasons[r["label"]] += 1
-    method = [
-        ["What this is", "Review sites pulled from page 1 of Google for \"[brand] review\" queries."],
-        ["Brief", "briefs/{}/".format(slug)],
-        ["Slate", slate],
-        ["Built", date.today().isoformat()],
-        ["Queries run", len(raw)],
-        ["Results kept", len(results)],
-        ["Unique sites", len(ranked)],
-        ["Excluded", "; ".join("{} {}".format(v, k) for k, v in sorted(reasons.items(), key=lambda x: -x[1]))],
-        ["Kept", "A review, a reviews page, a comparison review, or a product-testing article, labelled "
-                 "by title and URL."],
-        ["Skipped", "The brand's own site (including padded domains like helixsleep.com), forums and "
-                    "community threads, retailers, app-store listings, and job sites: for franchise and "
-                    "service brands, \"[brand] review\" is full of employee reviews on Indeed and Glassdoor, "
-                    "which is the supply side reviewing the brand, not its customers. Every skip is on the "
-                    "Excluded sheet with its reason: the screen is a heuristic, so check it."],
-        ["Not yet run", "The plural \"[brand] reviews\" for 61 brands. A 3-brand test showed it adds about "
-                        "87% more usable sites; held for this month's SerpAPI budget."],
-        ["Ranking", "Sites are sorted by how many brands they reviewed. A site that reviewed four "
-                    "brands in a category is a category reviewer: the person to pitch the fifth."],
-        ["Not a measure of", "Traffic, authority, or whether the site takes affiliate placements. "
-                             "Those come at the qualify step."],
-        ["Source", "SerpAPI, google.com, desktop, San Francisco, page 1, no cache."],
-    ]
-    ws = wb.create_sheet("Method")
-    for row in method:
-        ws.append(row)
-    for r in ws.iter_rows():
-        r[0].font = head_font
-        r[1].font = body_font
-        r[1].alignment = Alignment(wrap_text=True, vertical="top")
-    ws.column_dimensions["A"].width = 18
-    ws.column_dimensions["B"].width = 100
-    wb.save(out)
+           for r in sorted(excluded, key=lambda r: (r["label"], r["domain"]))])
 
 
 def main():
@@ -271,7 +211,8 @@ def main():
     ap.add_argument("--slate", default=date.today().strftime("%Y-%m"))
     args = ap.parse_args()
     out = build(args.slug, args.slate)
-    print("wrote {}".format(out.relative_to(ROOT)))
+    for name in ("review-results.csv", "review-excluded.csv"):
+        print("wrote {}".format((out / name).relative_to(ROOT)))
     return 0
 
 

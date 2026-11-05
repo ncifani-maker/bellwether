@@ -5,6 +5,147 @@ why, so a later session doesn't relitigate it.
 
 ---
 
+## 2026-11-05 — Demo briefs replay what's saved
+
+**D27. On a demo brief, every command replays saved results; `--live` goes live.** Nicole, rehearsing
+the talk: she stopped a live `/run-seeds braise` twice ("we're going to need to move faster"), and
+asked for a way to "minimize the time to results" with "the results we already have". She chose for
+it to switch on by itself rather than by a word typed on stage, since a forgotten word would mean a
+slow and possibly paid run in front of the audience.
+- **What's a demo brief:** one `/reset-demo` can reset, i.e. one with `raw/seeds.baseline.csv` (D23).
+  `_paths.is_demo()` checks the file, not a name (D4). Braise is the only one.
+- **What replays:**
+  - `/snowball` reuses every saved read, whatever its age, and leaves out sites never read.
+  - `/run-seeds` replays seeds already in `serp-results.json` (marked done, "replayed from saved
+    results"), and sites from `site-profiles.csv`.
+  - `/fetch-emails` fills only saved and reused contacts.
+  - The volume check shows saved volumes.
+  - Each command prints one line saying so. Anything not saved is listed and left out. Exit 4
+    (`_budget.DEMO`) when there's nothing to replay at all.
+- **Nothing spends without `--live`:** `_budget.gate()` refuses on a demo brief, as a backstop for
+  every paid command.
+- **Timed on Braise** (reset → snowball → approve five → run-seeds, then fetch-emails on a test
+  shortlist): every step under half a second, 0 searches, no site visits, ledger unchanged, and
+  review-sites.csv rewritten with 0 changed lines. The same run went live earlier today and took
+  minutes.
+- **Why replaying matters for spend too:** `/reset-demo` removed the Made In, Ooni and ThermoWorks
+  seeds searched on Nov 4, `/snowball` proposed them again, and today's live run paid again for those
+  6 searches (10 spent, 4 of them new: Meatstick and Gozney). A replay would have spent 0.
+- **Also fixed:** `site_profile.py` crashed writing review-sites.csv when a freshly profiled site's
+  `latest_year` was a number, after visiting all 30 sites. The file was untouched; the re-run worked.
+
+---
+
+## 2026-11-04 (night) — The shortlist lives in review-sites.csv
+
+**D26. Curation happens in the results file: the tool suggests, a person picks.** Nicole: "how do we go
+from running the seeds to coming up with the short list?" Until now that step was a hand export to
+Google Sheets. Now:
+- `review-sites.csv` has two columns right after `domain`, where they're visible when the file is
+  scrolled left (as it is on stage, to keep emails off screen):
+  - **`suggested`**, the tool's: "yes", "check: why" or "no: why". Media, wrong matches and competitors
+    are no. Unknown site types, a newest date over a year old, or no contact page or published email
+    are check. A site that blocked our reader is still yes, since its contact just isn't known yet.
+    Recomputed on every write; `site_profile.py --suggest-only` refreshes it after hand edits.
+  - **`shortlist`**, the person's: mark yes. Never touched by the pipeline.
+- **`/fetch-emails <slug>`** works from the brief's own file: it looks up only `shortlist` = yes, and fills
+  `email` / `email status` in place. A team's exported CSV still works, and gets a copy back.
+- **A contact is the site's, whatever list found it.** A usable contact verified under another brief is
+  reused (copied, marked where it came from) instead of paying Hunter again. Tested on Braise: 3 sites
+  marked yes, all 3 reused from the October list, no Hunter spend.
+- Why "suggested" and not a verdict: the rules on Braise flagged thecookwareadvisor.com (the best
+  cookware fit) and prudentreviews.com as inactive because their homepages show old dates.
+
+Also: `/import-seeds` and `/create-seeds` are back in the talk as two of the three ways to get seeds,
+with `/snowball` the third. The review filter now catches forum sites by name or thread URL, and
+google.com copies (found when Made In, Ooni and ThermoWorks were searched: 6 searches, 17 new review
+sites, 4 of them forums, a shop and a Google copy).
+
+---
+
+## 2026-11-04 (evening) — One folder per brand, one results file
+
+**D25. Everything for a brand lives in its brief folder, and the results are one file.** Nicole, preparing
+the talk: start with the brief, give it to /snowball, run the seeds, and never jump between folders.
+"Why is creator and review sites separate files? They should be one, and it should be in the same
+directory as the seed list. Let's clean everything up."
+
+```
+briefs/<slug>/brief.md           the brief
+briefs/<slug>/snowball.csv       /snowball: brands the review sites also review
+briefs/<slug>/seeds.csv          the seed list; approved picks land here
+briefs/<slug>/review-sites.csv   /run-seeds: one row per review site (gitignored: emails)
+briefs/<slug>/raw/               the commands' own files: search results, kept/excluded, reads
+```
+
+- `review-sites.csv` merges the old `review-sites.csv` and `creator-shortlist.csv`: the site-profiles
+  columns, plus `best_rank` and `result_types`, plus `email` and `email status`.
+- **It's a living file.** A run adds new sites and refreshes research columns, but never touches a column
+  a person added (Braise's site type, niche, notes) or an email that was verified or typed in. Tested: a
+  re-run on Braise kept all 32 rows, the hand categories and the verified emails, and added best rank.
+- `/snowball` starts from `starting-sites.csv` if a brief has one (a partner export), else from
+  `review-sites.csv`, so the loop runs on one file. Braise's starting list was folded into its
+  `review-sites.csv`.
+- `outputs/` is gone. Braise, affiliate-seo-creators and the Homeaglow gift-card list moved into their
+  brief folders (tracked files with `git mv`). Files replaced by the merge went to the Mac's Trash, not
+  deleted. Supersedes D21's `outputs/<slug>/<slate>/`. Months no longer split folders: `serp-results.json`
+  keeps every search across runs.
+- `docs/outputs-guide.md` became `docs/brief-folder.md`.
+
+---
+
+## 2026-11-04 (later) — Outputs are CSV
+
+**D24. Every pipeline output is a CSV, not an xlsx.** Nicole: "the files should be csv not xlsx", with the
+team's own sheet as the model for the columns.
+- `review-sites.xlsx` (four tabs) became `review-sites.csv`, `review-results.csv` and
+  `review-excluded.csv`.
+- `creator-shortlist.xlsx` became `creator-shortlist.csv`: the columns of `site-profiles.csv` in the same
+  order (with `ai_search`, `ai_training` and `cdn` kept separate), the team's tiers first, plus `email`
+  and `email status` at the end, as in the team's sheet.
+- At research time `email` holds the address a site publishes, with status "published on site, not yet
+  verified" (D18, which used a `published email (unverified)` column). `/fetch-emails` fills the same two
+  columns in place. An address the pipeline put there is the pipeline's to update, so a published address
+  that bounces is cleared. Tested: breathequality.com's published address bounced and was cleared.
+- The workbooks' Method tabs became `docs/outputs-guide.md`.
+- The shortlist holds addresses, so `outputs/**/creator-shortlist*.csv` is gitignored.
+- Both existing runs were converted: the review CSVs rebuilt from `serp-results.json` (counts match the
+  old tabs: 208 / 341 / 281), and the shortlist from `site-profiles.csv` plus the 64 published addresses.
+  The four old workbooks are in the Mac's Trash, not deleted.
+
+---
+
+## 2026-11-04 — Braise demo, and commands that hold up on stage
+
+**D23. The commands are built to run live in the talk.** Nicole: "making the commands workable during
+the demo", with Braise (fictional non-toxic cookware, `briefs/braise/`) as the demo brand.
+
+- **Seeds are marked `done` once searched.** `serp_scan.py` used to leave them `approved`, so every run
+  searched them again: a dry run re-planned Abbio and Misen hours after they ran, and a real run would
+  have paid twice. Searching one again now means approving it again; approval is the permission to spend.
+- **/snowball saves only what Nicole approves.** It used to save every pick as `proposed`. The next run
+  then treated them as known and stopped proposing them, so a rehearsal changed the demo.
+- **A demo brief can be reset.** `/reset-demo <slug>` copies `seeds.baseline.csv` back over `seeds.csv`.
+  Only a brief with a baseline can be reset, so a client's seeds can't be.
+- **/snowball reuses a read for 24 hours** (`snowball-reads.json`, per site) and reads only sites it
+  hasn't seen. Nicole chose the morning read over a live one: Braise takes about 40 seconds fresh and
+  under a second reused, with no dependence on the venue's wifi. `--refresh` reads again.
+- **A brief can keep its own starting list,** `briefs/<slug>/starting-sites.csv`. It's an input, not an
+  output, so it lives with the brief, and `/snowball <slug>` needs no path. A `site type` column set by
+  hand beats the tool's tier guess. A list categorized by hand keeps its media sites (Nicole: "media
+  category is okay to include"); "Competitor brand" and "Wrong match" rows are skipped.
+- **The AI crawler check travels with the list.** Braise's starting sites carry an `LLM crawlers` column
+  from the research step. It's information, never a filter (Nicole: include sites that block LLMs, just
+  know about it).
+- **Nothing looks broken on screen.** A "# ..." settings line that Nimbalyst adds to a CSV is skipped by
+  every reader and kept by the writers. `/run-seeds` prints short paths. `/api-check` shows a service
+  Bellwether doesn't use yet (Close) as "later", not a red FAIL.
+
+Abbio and Misen (2 of Braise's first picks) were searched on Nov 4: 4 searches, no new review sites. The
+same four cookware reviewers came back, so the cookware review world is small.
+
+---
+
 ## 2026-10-30 — /snowball: seed brands from what our reviewers already review
 
 **D22. Seed brands can come from the reviewers, not from memory.** Nicole asked to automate the
@@ -30,6 +171,12 @@ covered categories.
 
 Limit: it can only grow categories whose reviewers are already in the data. The 10 categories pulled by
 hand in June and July have no reviewer sites in Bellwether yet.
+
+**Fix, 2026-11-04 (found setting up the Braise demo).** Filler words ("our", "in", "the", "and") were
+stripped from anywhere in a slug, so Our Place became "place" and Made In became "made". They're now
+stripped only at the ends. A filler word that starts a brand is kept with the next word, and "X and Y"
+brands are recorded both ways (Tuft & Needle, Boll & Branch). Full pool re-run: 139 of 179 sites read,
+3,244 names on 2+ sites.
 
 ---
 

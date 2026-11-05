@@ -61,7 +61,8 @@ python3 "${CLAUDE_SKILL_DIR}/../../../scripts/seed_volume.py" <slug>
 
 DataForSEO, one request, pay-as-you-go: the dry run shows the balance first. Exit 3 means over the
 confirm threshold; ask, then `--yes`. Exit 2 means the balance is too low; say so. Only offer this;
-don't run it unasked.
+don't run it unasked. On a demo brief it shows only saved volumes and spends nothing. Exit 4 means
+none are saved, and `--live` checks for real (D27).
 
 ## 6. Show the list and record her decision
 

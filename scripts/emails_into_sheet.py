@@ -17,12 +17,13 @@ address in a working file looks exactly like a live one.
 
 A sheet that already has an `email` column (an earlier copy the team kept
 working in) is filled in place instead: blank cells get an address, a cell
-the team filled is never overwritten (a different address is reported, not
+the team filled is never overwritten (a cell this pipeline filled, its status
+still one of ours, is updated) (a different address is reported, not
 replaced), and the status column is refreshed only where it still holds one
 of this script's own statuses, so a team note survives. --status-column
 names that column when it isn't called "email status".
 
-The copy goes to outputs/<brief>/<slate>/, with every other output (CHANGELOG
+The copy goes to the brief's own folder, briefs/<brief>/ (CHANGELOG D25; before that
 D21, Nicole). That folder is inside the repo, so before writing, git is asked
 whether the file is ignored; if it is not, nothing is written. `.gitignore`
 covers "*with emails*.csv" and the pre-commit hook refuses email addresses,
@@ -65,6 +66,7 @@ def is_ours(status):
     """A status this script wrote, now or in an earlier wording, as opposed to a team note."""
     s = status.strip()
     return (s in ("", "verified", "unconfirmed: domain accepts all mail", "found, not yet verified",
+                  "published on site, not yet verified",
                   "none found", "bounces (verifier: invalid)", "unverifiable")
             or s.startswith(("waiting", "not usable:")))
 
@@ -74,15 +76,21 @@ def main():
     ap.add_argument("file", type=Path, help="the team's exported CSV")
     ap.add_argument("--brand", required=True, help="brief slug the contacts were sourced under")
     ap.add_argument("--slate", default=__import__("datetime").date.today().strftime("%Y-%m"),
-                    help="output folder under outputs/<brief>/, default this month")
+                    help="kept for old commands; the copy now goes in briefs/<brief>/")
     ap.add_argument("--status-column", default="email status",
                     help="the sheet's email-status column, if it already has one under another name")
     args = ap.parse_args()
 
     src = args.file.expanduser().resolve()
+    import _paths
+    # The brief's own review-sites.csv is updated in place (D26): one file from
+    # research to outreach. Any other sheet (a team export) gets a copy, as before.
+    in_place = src == _paths.review_sites(args.brand).resolve()
     raw = src.read_bytes()
+    head = [l + "\n" for l in raw.decode("utf-8-sig").splitlines() if l.startswith("#")]
     bom = raw.startswith(b"\xef\xbb\xbf")
-    rows = list(csv.DictReader(raw.decode("utf-8-sig").splitlines()))
+    # Editors such as Nimbalyst keep their view settings on a "# ..." first line.
+    rows = list(csv.DictReader(l for l in raw.decode("utf-8-sig").splitlines() if not l.startswith("#")))
     if not rows or "domain" not in rows[0]:
         sys.exit("{} has no `domain` column".format(src.name))
     fields = list(rows[0].keys())
@@ -94,11 +102,12 @@ def main():
     out_fields = fields + [f for f in ours if f not in fields]
 
     with CONTACTS.open() as fh:
-        contacts = {r["handle"]: r for r in csv.DictReader(fh) if r["brand"] == args.brand}
+        contacts = {r["handle"]: r for r in csv.DictReader(l for l in fh if not l.startswith("#"))
+                    if r["brand"] == args.brand}
 
-    out_dir = ROOT / "outputs" / args.brand / args.slate
+    out_dir = _paths.brief_dir(args.brand)
     out_dir.mkdir(parents=True, exist_ok=True)
-    dst = out_dir / (src.stem + " (with emails).csv")
+    dst = src if in_place else out_dir / (src.stem + " (with emails).csv")
     # Third safeguard after .gitignore and the hook: refuse to write a file of
     # addresses into the repo unless git confirms it will ignore it.
     import subprocess
@@ -109,8 +118,16 @@ def main():
 
     out, changed, kept = [], [], []
     for r in rows:
+        if in_place and r["domain"].strip() not in contacts:
+            out.append(dict(r))      # not looked up for this brief: leave the row as it is
+            continue
         email, status = status_for(contacts.get(r["domain"].strip()))
         theirs = (r.get("email") or "").strip()
+        # An address this pipeline put there (its status is still ours, e.g. "published
+        # on site, not yet verified") is ours to replace: a published address that
+        # bounces must not stay in the sheet looking live. Only a team edit is kept.
+        if theirs and is_ours(r.get(scol) or ""):
+            theirs = ""
         conflict = bool(theirs) and theirs.lower() != email.lower()
         new = dict(r)
         if not theirs:
@@ -123,17 +140,20 @@ def main():
             changed.append(r["domain"])
         out.append(new)
     with dst.open("w", newline="", encoding="utf-8-sig" if bom else "utf-8") as fh:
+        if in_place:
+            fh.writelines(head)
         w = csv.DictWriter(fh, fieldnames=out_fields)
         w.writeheader(); w.writerows(out)
 
-    back = list(csv.DictReader(dst.read_text(encoding="utf-8-sig").splitlines()))
+    back = list(csv.DictReader(l for l in dst.read_text(encoding="utf-8-sig").splitlines() if not l.startswith("#")))
     assert [b["domain"] for b in back] == [r["domain"] for r in rows], "row order changed"
     assert all(all(b[f] == r[f] for f in fields if f not in ours) for b, r in zip(back, rows)), \
         "a column changed"
-    assert src.read_bytes() == raw, "source changed"
+    assert in_place or src.read_bytes() == raw, "source changed"
 
-    print("wrote {}".format(dst))
-    print("  {} rows, same order, other columns unchanged; source untouched".format(len(back)))
+    print("{} {}".format("updated in place:" if in_place else "wrote", dst))
+    print("  {} rows, same order, other columns unchanged{}".format(
+        len(back), "" if in_place else "; source untouched"))
     if "email" in fields:
         print("  filled in place: {} row(s) changed in `email` / `{}`".format(len(changed), scol))
     print("  email filled in: {}".format(sum(1 for b in back if b["email"])))

@@ -33,8 +33,13 @@ the budget and spends nothing.
 | `--keywords "a" "b"` | One-off keywords instead of the seed file |
 | `--dry-run` | Plan and budget only |
 | `--yes` | Approve a run over the confirm threshold |
+| `--live` | On a demo brief: search for real instead of replaying saved results |
 
 ## Step 2: Handle the gates
+
+**Exit code 4: a demo brief with nothing saved.** A demo brief (one `/reset-demo` can reset) replays
+seeds from saved results and never searches unless given `--live` (D27). Exit 4 means none of the
+approved seeds had saved results. Nothing was spent. Say so; searching them is for before a talk.
 
 **Exit code 3 — stopped before spending.** The run is bigger than the confirm
 threshold in `config/budgets.json`. Nothing was spent. Show Nicole the
@@ -52,7 +57,7 @@ substitute `--keywords` to get around it. Show her the seeds and ask.
 
 ## Step 3: Report
 
-The script prints a table and writes `outputs/<brand>/<slate>/serp-domains.csv`.
+The script prints a table and writes `briefs/<brand>/raw/serp-domains.csv`.
 Relay:
 
 - Domain count, seeds run, searches spent, and what SerpAPI says is left.

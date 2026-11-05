@@ -11,6 +11,9 @@ Three checks, in order, before anything is spent (config/budgets.json):
   confirm_above  a larger run stops and prints the plan (exit code 3) instead of
                  spending; re-run with --yes once Nicole has approved it
 
+And one before those: a demo brief (_paths.is_demo) never spends unless the
+command was given --live (exit code 4, CHANGELOG D27).
+
 The ledger is Bellwether's own count, not the provider's. The provider's number
 is the truth for what is left; the ledger is the truth for what Bellwether spent,
 which is what the monthly cap limits.
@@ -28,7 +31,7 @@ CONFIG = ROOT / "config" / "budgets.json"
 LEDGER = ROOT / "data" / "api-usage.csv"
 FIELDS = ["date", "provider", "units", "unit_type", "command", "brand", "slate", "note"]
 
-OK, REFUSE, CONFIRM = 0, 2, 3
+OK, REFUSE, CONFIRM, DEMO = 0, 2, 3, 4
 
 
 def budgets() -> dict:
@@ -74,7 +77,7 @@ def month_used(provider: str, month: str = None, unit: str = None) -> int:
         return 0
     total = 0
     with LEDGER.open() as fh:
-        for row in csv.DictReader(fh):
+        for row in csv.DictReader(l for l in fh if not l.startswith("#")):
             if unit and (row.get("unit_type") or "") != unit:
                 continue
             when = row.get("date") or ""
@@ -107,12 +110,19 @@ def log(provider, units, unit_type, command, brand="", slate="", note=""):
         })
 
 
-def gate(provider, planned, remaining=None, yes=False, unit="searches"):
-    """-> (code, lines). code is OK, REFUSE or CONFIRM; lines explain why.
+def gate(provider, planned, remaining=None, yes=False, unit="searches", brand=None, live=False):
+    """-> (code, lines). code is OK, REFUSE, CONFIRM or DEMO; lines explain why.
 
     `remaining` is what the provider says is left on the account (None if the
     provider cannot report it, in which case the reserve check is skipped).
+    `brand` and `live`: a demo brief spends only when the command was given --live.
     """
+    if brand and planned and not live:
+        import _paths
+        if _paths.is_demo(brand):
+            return DEMO, ["demo brief: this needs {:,} {} {}, and a demo brief spends nothing unless "
+                          "asked. Nothing spent. Re-run with --live, before the talk, to go live."
+                          .format(planned, provider, unit)]
     cfg = _provider_cfg(provider)
     # A provider can cap each unit separately: monthly_search_cap,
     # monthly_verification_cap. Use the one naming this unit; otherwise the

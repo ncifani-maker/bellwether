@@ -11,6 +11,10 @@ __pycache__/
 
 # Scout/study artifacts: regenerable, and large
 outputs/**/*.xlsx
+
+# A brief's results file and any shortlist carry email addresses (D18, D25). Local only (D16).
+briefs/*/review-sites.csv
+**/*shortlist*.csv
 *.backup-*
 
 # Contacts hold PII (verified business emails). Never commit.

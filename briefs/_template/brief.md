@@ -14,8 +14,9 @@
 - **Comparable brands:** <3–5 product brands this client's buyers also buy, the kind independent sites review.
   Not direct service or franchise competitors: in the 2026-10 run those turned up job sites, not reviewers
   (CHANGELOG D22).>
-- **Known partner sites (optional):** <path to a CSV export of the client's current affiliate or creator
-  partners, with a domain or website column. /snowball starts from these when they exist.>
+- **Known partner sites (optional):** <a CSV export of the client's current affiliate or creator partners,
+  with a domain or website column, saved as `briefs/<slug>/starting-sites.csv`. /snowball starts from it
+  when it exists. A `site type` column, if you add one, is respected (CHANGELOG D23).>
 
 ## Conversion event  **Required**
 <The event that counts as a conversion, the attribution window, the tracker.>
